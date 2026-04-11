@@ -74,7 +74,11 @@ Ask the user:
 - Use "figurine", "toy", "plastic", "puppet" language in Veo prompts
 - Replace "toddler/baby/child/boy/girl" with "small character", "cartoon figurine"
 - If a style fails: don't retry same style — switch to toy-Pixar or clay
-7. **Duration** — 60s or 90s
+7. **Duration** — 30s / 45s / 60s / 90s
+   - **30s** — Single-topic clip. One focused concept, 3-4 clips. Best for social media reels, quick explainers, or single-fact videos.
+   - **45s** — Single-topic clip. Slightly more depth, 5-6 clips. Good for classroom warm-ups or topic teasers.
+   - **60s** — Standard explainer. Full concept with hook, explanation, and summary.
+   - **90s** — Deep dive. Multiple sub-topics or detailed step-by-step walkthroughs.
 8. **Aspect ratio** — 16:9 or 9:16
 9. **Ambient layer** (`--audio-layers`) — Auto-suggest a category based on topic/setting. User can accept, override, or disable (`--no-ambient`).
    - **Bundled loops** (zero cost, instant): `forest`, `rain`, `ocean`, `space`, `underwater`, `workshop`, `lab`, `garden`. Stored in repo `ambient-loops/` dir.
@@ -141,11 +145,21 @@ Check for any changes the client made. Apply changes before proceeding to Phase 
 **If chapter source provided:** Read it first. Use the textbook's exact definitions and terminology.
 
 **Script guidelines:**
-- Each keyframe = 8 seconds. Total = `DURATION_SEC / 8` keyframes.
+- Each keyframe = 5-8 seconds. Total = `DURATION_SEC / 8` keyframes (round up).
 - Each narration segment = ~18-22 words (~150 WPM for 8s).
-- Structure: Hook -> Core explanation -> Key facts -> Summary.
 - Character descriptions must be identical verbatim in every prompt.
 - Auto-insert audio tags for `eleven_v3` (see `references/audio-tags.md` for tag reference).
+
+**Structure by duration:**
+
+| Duration | Clips | Structure |
+|----------|-------|-----------|
+| 30s | 3-4 | Hook (1 clip) → Core explanation (2-3 clips). No summary — end on the key takeaway. |
+| 45s | 5-6 | Hook (1) → Core explanation (3-4) → Quick summary (1). Tight, no filler. |
+| 60s | 7-8 | Hook (1) → Core explanation (4-5) → Key facts (1) → Summary (1). |
+| 90s | 10-12 | Hook (1) → Core explanation (5-7) → Key facts (2) → Summary (1-2). |
+
+For 30s/45s clips: keep narration dense and focused on one single concept. No sub-topics, no tangents. Every second must earn its place.
 
 **For prompt construction details:** Read `references/prompting.md`
 
