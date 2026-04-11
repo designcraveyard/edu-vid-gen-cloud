@@ -1,6 +1,6 @@
 ---
 name: edu-vid-gen
-description: Generate an educational explainer video for a given topic and school class. Audio-first pipeline with VO-driven clip planning, Gemini-powered validation after every clip, MoviePy compositor for transitions, ambient audio layers (--audio-layers), and checkpoint gates between phases. Supports human/abstract/no-character modes.
+description: Generate an educational explainer video for a given topic and school class. Cloud-native Google Drive-first pipeline with budget tiers (Low/Medium/High), collaborative review gates at every milestone, full observability via Google Sheets tracker, and Google Docs for editable briefs. Audio-first architecture with VO-driven clip planning, Gemini-powered validation, MoviePy compositor, ambient audio layers, and multi-model video backends (Veo, Wan). Use this skill when the user asks to create an educational video, generate a video for a class/topic, or wants to produce animated explainer content.
 ---
 
 # Edu Video Generator V2
@@ -93,7 +93,7 @@ Ask the user:
     
     Use `tierConfig` throughout all subsequent phases to select models, transition strategy, and compositing script.
 
-Save variables: `TOPIC`, `CLASS`, `NARRATION_LANG`, `CHAPTER_SOURCE`, `STYLE`, `CHARACTER_MODE`, `DURATION_SEC`, `ASPECT`, `AMBIENT_CATEGORY`
+Save variables: `TOPIC`, `CLASS`, `NARRATION_LANG`, `CHAPTER_SOURCE`, `STYLE`, `CHARACTER_MODE`, `DURATION_SEC`, `ASPECT`, `AMBIENT_CATEGORY`, `BUDGET_TIER`
 
 Create output folder:
 ```bash
@@ -179,7 +179,7 @@ node __PLUGIN_DIR__/scripts/gdocs.mjs update \
 For each clip in the brief's keyframe table, append a row to the Timeline tab:
 ```bash
 node __PLUGIN_DIR__/scripts/gsheets.mjs append \
-  --spreadsheet-id "$(jq -r '.trackerSheetId' $OUTPUT_DIR/drive-manifest.json)" \
+  --id "$(jq -r '.trackerSheetId' $OUTPUT_DIR/drive-manifest.json)" \
   --tab "Timeline" \
   --row '{
     "Clip #": "{NN}",
@@ -216,7 +216,7 @@ Please review each timeline row and set Status to "Approved" or "Rejected" (with
 **Step 2-G2e — Read review and check approval:**
 ```bash
 node __PLUGIN_DIR__/scripts/read-review.mjs \
-  --spreadsheet-id "$(jq -r '.trackerSheetId' $OUTPUT_DIR/drive-manifest.json)" \
+  --id "$(jq -r '.trackerSheetId' $OUTPUT_DIR/drive-manifest.json)" \
   --tab "Timeline"
 ```
 
@@ -393,10 +393,12 @@ Generate the entire narration at once with word-level timestamps. The clip count
 
 **Step 2.5c** — Generate full VO + timeline:
 ```bash
+# Use voice model from budget tier config
+VOICE_MODEL=$(node -e "import {getTierConfig} from '__PLUGIN_DIR__/scripts/budget-tiers.mjs'; console.log(getTierConfig('$BUDGET_TIER').voiceModel)")
 ELEVENLABS_API_KEY="$ELEVENLABS_API_KEY" node __PLUGIN_DIR__/scripts/generate-audio-timeline.mjs \
   --text "{FULL_NARRATION_WITH_DEVANAGARI}" \
   --output-dir "{OUTPUT_DIR}/audio" \
-  --voice "ecp3DWciuUyW7BYM7II1" --model eleven_v3 \
+  --voice "ecp3DWciuUyW7BYM7II1" --model "$VOICE_MODEL" \
   --stability 0.5 --speed 0.98 --language hi \
   --min-clip 5 --max-clip 8
 # Optional: --dict-id {ID} --dict-version {VER} for English pronunciation fixes
@@ -734,7 +736,9 @@ Use `composite.py` — NOT manual ffmpeg xfade chains. The compositor reads time
 
 **Step 5a — Run compositor:**
 ```bash
-python3 __PLUGIN_DIR__/scripts/composite.py \
+# Select compositor based on budget tier
+COMPOSITOR="__PLUGIN_DIR__/scripts/$(node -e "import {getTierConfig} from '__PLUGIN_DIR__/scripts/budget-tiers.mjs'; console.log(getTierConfig('$BUDGET_TIER').compositor)")"
+python3 $COMPOSITOR \
   --clips-dir "{OUTPUT_DIR}/clips" \
   --timeline "{OUTPUT_DIR}/audio/timeline.json" \
   --vo-audio "{OUTPUT_DIR}/audio/full-vo.mp3" \
@@ -998,13 +1002,7 @@ At any review gate (G3-G8), the client can request: **"Redo from Phase X."** Thi
 2. **Claude asks what to keep/redo** — Confirm which phases to preserve and which to regenerate:
    - "Which earlier assets should I keep as-is?"
    - "What specifically should change in the redo?"
-3. **Mark affected tracker rows** — For all assets from the restart phase onward:
-   ```bash
-   node "__PLUGIN_DIR__/scripts/gsheets.mjs" update \
-     --sheet-id "$TRACKER_SHEET_ID" --tab "Review" \
-     --filter-phase ">={RESTART_PHASE}" \
-     --set-status "Redo Pending"
-   ```
+3. **Mark affected tracker rows** — For all assets from the restart phase onward, update each affected row's Status to "Redo Pending" in the Review tab of the tracker sheet.
 4. **Re-run from the specified phase** — Execute all phases from the restart point forward, with all gates (G3-G8) active. Earlier phases' assets remain untouched.
 
 ### Restart Examples
