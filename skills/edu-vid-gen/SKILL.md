@@ -302,6 +302,72 @@ GEMINI_API_KEY="$GEMINI_API_KEY" node __PLUGIN_DIR__/scripts/generate-character-
 
 Generates: poses sheet, expressions sheet, recreation prompt. Wait 35s between sheets. Review with user. Use pose sheet as `--reference` in all subsequent image prompts.
 
+### Phase 2.1 — Drive Sync & Review (Gate G3)
+
+After character sheet images are generated and approved locally, sync to Drive and wait for client review.
+
+**Step 2.1-G3a — Upload character sheets to Drive:**
+```bash
+for img in "$OUTPUT_DIR"/characters/*.png "$OUTPUT_DIR"/characters/*.jpg; do
+  node "__PLUGIN_DIR__/scripts/sync-to-drive.mjs" \
+    --file "$img" --subfolder "character-sheets" \
+    --project-folder-id "$PROJECT_FOLDER_ID"
+done
+```
+
+**Step 2.1-G3b — Log to tracker (Review tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Review" \
+  --values '["{TIMESTAMP}", "Character Sheet", "{filename}", "Pending Review", "", "{drive_link}"]'
+```
+
+**Step 2.1-G3c — Log to tracker (Generation Log tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Generation Log" \
+  --values '["{TIMESTAMP}", "Phase 2.1", "Character Sheet", "{filename}", "Generated", "{model}", "{cost}"]'
+```
+
+**Step 2.1-G3d — Log to tracker (Prompts tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Prompts" \
+  --values '["{TIMESTAMP}", "Character Sheet", "{filename}", "{prompt_text}"]'
+```
+
+**Step 2.1-G3e — Gate G3: Share and STOP.**
+
+Present to client:
+```
+🎨 REVIEW GATE G3 — Character Sheets
+
+Character sheets have been uploaded for review:
+• Drive folder: [link to character-sheets subfolder]
+• Review tracker: [link to tracker → Review tab]
+
+Please review each character sheet and set Status to "Approved" or "Rejected" (with notes in the tracker).
+
+⏸️ STOPPING — waiting for your review. Reply here when done.
+```
+
+**STOP.** Do not proceed until the client replies.
+
+**Step 2.1-G3f — Read review and check approval:**
+```bash
+node "__PLUGIN_DIR__/scripts/read-review.mjs" \
+  --type sheet --id "$TRACKER_SHEET_ID" --tab "Review" \
+  --filter-status "Rejected"
+```
+
+If any rows are rejected:
+1. Read the reviewer notes for each rejected character sheet
+2. Summarize what was rejected and why
+3. Regenerate only the rejected character sheets with updated prompts
+4. Re-upload the regenerated sheets to Drive (same subfolder)
+5. Update the Review tab rows with new links and reset status to "Pending Review"
+6. Return to Gate G3 (re-share links and STOP again)
+
 **GATE:**
 ```bash
 python3 __PLUGIN_DIR__/scripts/checkpoint.py --phase 2 --output-dir "{OUTPUT_DIR}"
@@ -373,6 +439,73 @@ node __PLUGIN_DIR__/scripts/slice-audio.mjs \
 
 **Step 2.5h** — Flag VO overflow clips (VO > 8s) for AC+TC split in Phase 4.
 
+### Phase 2.5 — Drive Sync & Review (Gate G4)
+
+After audio/VO is generated and approved locally, sync to Drive and wait for client review.
+
+**Step 2.5-G4a — Upload audio files to Drive:**
+```bash
+for audio_file in "$OUTPUT_DIR"/audio/full-vo.mp3 "$OUTPUT_DIR"/audio/timeline.json; do
+  node "__PLUGIN_DIR__/scripts/sync-to-drive.mjs" \
+    --file "$audio_file" --subfolder "audio" \
+    --project-folder-id "$PROJECT_FOLDER_ID"
+done
+```
+
+**Step 2.5-G4b — Log to tracker (Review tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Review" \
+  --values '["{TIMESTAMP}", "Audio", "full-vo.mp3", "Pending Review", "", "{drive_link}"]'
+```
+
+**Step 2.5-G4c — Log to tracker (Generation Log tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Generation Log" \
+  --values '["{TIMESTAMP}", "Phase 2.5", "Audio", "full-vo.mp3", "Generated", "{model}", "{cost}"]'
+```
+
+**Step 2.5-G4d — Log to tracker (Prompts tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Prompts" \
+  --values '["{TIMESTAMP}", "Audio", "full-vo.mp3", "{narration_text}"]'
+```
+
+**Step 2.5-G4e — Gate G4: Share and STOP.**
+
+Present to client:
+```
+🎙️ REVIEW GATE G4 — Audio / Voiceover
+
+Audio files have been uploaded for review:
+• Drive folder: [link to audio subfolder]
+• Full VO: [direct link to full-vo.mp3]
+• Review tracker: [link to tracker → Review tab]
+
+Please listen to the voiceover and set Status to "Approved" or "Rejected" (with notes in the tracker).
+
+⏸️ STOPPING — waiting for your review. Reply here when done.
+```
+
+**STOP.** Do not proceed until the client replies.
+
+**Step 2.5-G4f — Read review and check approval:**
+```bash
+node "__PLUGIN_DIR__/scripts/read-review.mjs" \
+  --type sheet --id "$TRACKER_SHEET_ID" --tab "Review" \
+  --filter-status "Rejected"
+```
+
+If any rows are rejected:
+1. Read the reviewer notes for each rejected audio asset
+2. Summarize what was rejected and why
+3. Regenerate only the rejected audio with updated settings/text
+4. Re-upload the regenerated audio to Drive (same subfolder)
+5. Update the Review tab rows with new links and reset status to "Pending Review"
+6. Return to Gate G4 (re-share links and STOP again)
+
 **GATE:**
 ```bash
 python3 __PLUGIN_DIR__/scripts/checkpoint.py --phase 2.5 --output-dir "{OUTPUT_DIR}"
@@ -409,6 +542,74 @@ For each clip in timeline.json:
 4. **Quality gate** — Claude vision review: aspect ratio, character consistency, scene continuity, VO-scene alignment, text contamination. Max 2 retries.
 5. **Display and ask** — if user approves + says keep going, skip confirmation on subsequent passing frames.
 6. **Compress all** after approval: `sips -Z 1280 frame-{NN}.jpg --out frame-{NN}-small.jpg --setProperty formatOptions 65`
+
+### Phase 3 — Drive Sync & Review (Gate G5)
+
+After keyframe images are generated and approved locally, sync to Drive and wait for client review.
+
+**Step 3-G5a — Upload keyframes to Drive:**
+```bash
+for img in "$OUTPUT_DIR"/images/frame-*.jpg; do
+  node "__PLUGIN_DIR__/scripts/sync-to-drive.mjs" \
+    --file "$img" --subfolder "keyframes" \
+    --project-folder-id "$PROJECT_FOLDER_ID"
+done
+```
+
+**Step 3-G5b — Log to tracker (Review tab):**
+
+For each keyframe image:
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Review" \
+  --values '["{TIMESTAMP}", "Keyframe", "{filename}", "Pending Review", "", "{drive_link}"]'
+```
+
+**Step 3-G5c — Log to tracker (Generation Log tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Generation Log" \
+  --values '["{TIMESTAMP}", "Phase 3", "Keyframe", "{filename}", "Generated", "{model}", "{cost}"]'
+```
+
+**Step 3-G5d — Log to tracker (Prompts tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Prompts" \
+  --values '["{TIMESTAMP}", "Keyframe", "{filename}", "{prompt_text}"]'
+```
+
+**Step 3-G5e — Gate G5: Share and STOP.**
+
+Present to client:
+```
+🖼️ REVIEW GATE G5 — Keyframe Images
+
+All keyframe images have been uploaded for review:
+• Drive folder: [link to keyframes subfolder]
+• Review tracker: [link to tracker → Review tab]
+
+Please review each keyframe and set Status to "Approved" or "Rejected" (with notes in the tracker).
+
+⏸️ STOPPING — waiting for your review. Reply here when done.
+```
+
+**STOP.** Do not proceed until the client replies.
+
+**Step 3-G5f — Read review and check approval:**
+```bash
+node "__PLUGIN_DIR__/scripts/read-review.mjs" \
+  --type sheet --id "$TRACKER_SHEET_ID" --tab "Review" \
+  --filter-status "Rejected"
+```
+
+If any rows are rejected:
+1. Read the reviewer notes for each rejected keyframe
+2. Summarize what was rejected and why
+3. Regenerate only the rejected keyframes with updated prompts
+4. Re-upload the regenerated keyframes to Drive (same subfolder)
+5. Update the Review tab rows with new links and reset status to "Pending Review"
+6. Return to Gate G5 (re-share links and STOP again)
 
 **GATE:**
 ```bash
@@ -580,3 +781,57 @@ Quick reference for the most common issues:
 - Veo face-blocking (17301594) -> use text-to-video mode (omit `--image`)
 - Veo word restriction (58061214) -> replace "girl/boy/child" with "character/animated figure"
 - ffmpeg not found -> `brew install ffmpeg`
+
+---
+
+## Phase 7 — Post-Completion Actions (G9)
+
+After the final video is approved, present options:
+
+> Video complete! Here are some things you can do next:
+>
+> 1. **Generate additional scenes** — Create standalone images using your character(s).
+>    Choose aspect ratio: 1:1, 9:16, 16:9, or other Gemini-supported ratios.
+>    Tell me a theme and I'll generate scene concepts to pick from.
+>
+> 2. **Print-ready images** — Convert keyframes and/or scene images to
+>    high-res, CMYK, print-ready format for book layouts.
+>
+> 3. **Redo from a milestone** — Change something in the pipeline:
+>    - Regenerate characters
+>    - Redo from after voiceover
+>    - Change compositing settings
+>    - Update ambient audio / sound effects
+>    - Re-do voiceover with different voice
+>
+> 4. **Image-wrapped text layouts** (Coming soon) — Generate book page layouts
+>    where text wraps around subjects in your images.
+>    This feature is not yet available but will be added in a future update.
+>
+> What would you like to do?
+
+### Option 1: Additional Scenes
+
+1. Ask the client for a theme or vague idea
+2. Generate 5-8 scene ideas based on topic + existing character
+3. Present ideas, let client pick which to create
+4. Ask for aspect ratio: 1:1, 9:16, 16:9, or other Gemini-supported
+5. Generate each scene using generate-image.mjs with --reference pointing to character sheet
+6. Upload to scenes/ folder via sync-to-drive.mjs
+7. Log in tracker (all tabs)
+8. Present for review
+
+### Option 2: Print-Ready Images
+
+1. Ask which images to enhance (keyframes, scenes, or specific ones)
+2. Run enhance-for-print.mjs on each selected image
+3. Upload to print/ folder via sync-to-drive.mjs
+4. Log in tracker
+
+### Option 3: Redo from Milestone
+
+Follow the Milestone Restart instructions.
+
+### Option 4: Image-Wrapped Text Layouts
+
+Inform client: "This feature is coming in a future update. It will generate book page layouts where text wraps around subjects in your images."
