@@ -80,6 +80,18 @@ Ask the user:
    - **Bundled loops** (zero cost, instant): `forest`, `rain`, `ocean`, `space`, `underwater`, `workshop`, `lab`, `garden`. Stored in repo `ambient-loops/` dir.
    - **ElevenLabs generation** (`--generate-ambient`): For vibes not covered by bundled loops. Costs ~$0.04 per 30s clip.
    - Save as `AMBIENT_CATEGORY` (or `none`).
+10. **Budget tier** — Low / Medium / High
+    - **Low**: Minimal cost. Veo Fast (no audio), MoviePy transitions, bundled ambient loops, Flash v2.5 voice model. Best for drafts or budget-conscious projects.
+    - **Medium**: Balanced. Model intelligently decides transitions and ambient. Eleven v3 voice. Good default.
+    - **High**: Quality-driven. Video-first compositing, generated transition clips, ElevenLabs ambient, sound effects, Eleven v3 voice.
+    
+    Load tier config:
+    ```javascript
+    import { getTierConfig } from '__PLUGIN_DIR__/scripts/budget-tiers.mjs';
+    const tierConfig = getTierConfig(BUDGET_TIER);
+    ```
+    
+    Use `tierConfig` throughout all subsequent phases to select models, transition strategy, and compositing script.
 
 Save variables: `TOPIC`, `CLASS`, `NARRATION_LANG`, `CHAPTER_SOURCE`, `STYLE`, `CHARACTER_MODE`, `DURATION_SEC`, `ASPECT`, `AMBIENT_CATEGORY`
 
@@ -93,6 +105,34 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 OUTPUT_DIR="${BASE_DIR}/${SLUG}-${TIMESTAMP}"
 mkdir -p "$OUTPUT_DIR"/{images,clips,clips-transition,audio,prompts,characters}
 ```
+
+### Phase 1.5 — Initialize Google Drive Project
+
+Run the project initialization script:
+
+```bash
+set -a; source "__PLUGIN_DIR__/.env" 2>/dev/null; set +a
+node "__PLUGIN_DIR__/scripts/init-project.mjs" \
+  --topic "$TOPIC" \
+  --class "$CLASS"
+```
+
+This creates the full Drive folder structure, brief doc, timeline sheet, and tracker sheet. Save the output manifest — it contains all folder/file IDs needed for subsequent phases.
+
+**Gate G1:** Write the collected inputs to `brief.gdoc` using gdocs.mjs. Share the brief link with the client:
+
+> "Project initialized. Brief uploaded: [Drive link]
+>  Please review the inputs and reply when ready to proceed."
+
+**STOP. Wait for client confirmation.**
+
+When client replies, read the brief back:
+
+```bash
+node "__PLUGIN_DIR__/scripts/read-review.mjs" --type doc --id $BRIEF_DOC_ID
+```
+
+Check for any changes the client made. Apply changes before proceeding to Phase 2.
 
 ---
 
