@@ -1,0 +1,9 @@
+{
+  "name": "edu-vid-gen-cloud",
+  "version": "1.0.0",
+  "description": "Cloud-native educational video generator — Google Drive-first pipeline with collaborative review gates, budget tiers, and full observability via Google Sheets. Audio-first architecture with VO-driven clip planning, Gemini-powered validation, MoviePy compositor, and multi-model video backends.",
+  "author": {
+    "name": "Abhishek Verma",
+    "email": "abhishek.verma@proton.me"
+  }
+}
