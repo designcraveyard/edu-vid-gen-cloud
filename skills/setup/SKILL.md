@@ -26,7 +26,8 @@ This wizard will help you:
   1. Check & install prerequisites (ffmpeg, Python, Node.js, etc.)
   2. Set up the cloud accounts you need
   3. Configure API keys and authentication
-  4. Verify everything works
+  4. Set up Google Workspace (Drive, Docs, Sheets) for cloud-native storage
+  5. Verify everything works
 
 Let's start by understanding what accounts you already have.
 ```
@@ -396,7 +397,74 @@ EOF
 
 ---
 
-## Step 5 — Install Editor Dependencies
+## Step 5 — Google Workspace Setup (Drive, Docs, Sheets)
+
+### 5.1 — Check for credentials.json
+
+Run:
+```bash
+ls "__PLUGIN_DIR__/credentials.json" 2>/dev/null
+```
+
+If file exists, skip to 5.2.
+
+If file does not exist, guide the user:
+
+> Google Workspace setup is needed for cloud-native artifact storage.
+>
+> You need to create an OAuth Client ID in your Google Cloud project.
+> Since you already have a Google Cloud project (from Veo setup), this is quick:
+>
+> 1. Go to: https://console.cloud.google.com/apis/library
+> 2. Enable these 3 APIs (click each, then Enable):
+>    - Google Drive API
+>    - Google Docs API
+>    - Google Sheets API
+>
+> 3. Go to: https://console.cloud.google.com/apis/credentials
+> 4. Click "Create Credentials" then "OAuth Client ID"
+> 5. Application type: "Desktop App"
+> 6. Name: "EduVidGen" (or anything)
+> 7. Click "Create" then "Download JSON"
+> 8. Save the downloaded file as: __PLUGIN_DIR__/credentials.json
+
+Use **AskUserQuestion** to confirm they've saved the file, then verify it exists.
+
+### 5.2 — Check for token.json
+
+Run:
+```bash
+ls "__PLUGIN_DIR__/token.json" 2>/dev/null
+```
+
+If file exists, skip to 5.3.
+
+If not, run the auth flow:
+
+```bash
+set -a; source "__PLUGIN_DIR__/.env" 2>/dev/null; set +a
+cd "__PLUGIN_DIR__" && node scripts/google-auth.mjs
+```
+
+**Note:** If user sees "This app isn't verified" warning, tell them:
+> This is normal for personal/internal Google Cloud projects. Click "Advanced" then "Go to EduVidGen (unsafe)". This is safe — it's your own project.
+
+### 5.3 — Verify Google Workspace connection
+
+```bash
+set -a; source "__PLUGIN_DIR__/.env" 2>/dev/null; set +a
+node -e "
+  import { findOrCreateFolder } from '__PLUGIN_DIR__/scripts/gdrive.mjs';
+  const folder = await findOrCreateFolder('EduVidGen');
+  console.log('Google Drive connected. Root folder: ' + folder.id);
+"
+```
+
+If successful, display connection confirmation and store root folder ID.
+
+---
+
+## Step 6 — Install Editor Dependencies
 
 ```bash
 cd "__PLUGIN_DIR__/editor" && npm install 2>&1 | tail -3
@@ -404,7 +472,7 @@ cd "__PLUGIN_DIR__/editor" && npm install 2>&1 | tail -3
 
 ---
 
-## Step 6 — Verify Setup
+## Step 7 — Verify Setup
 
 Run verification of each component. Adapt checks based on AUTH_STRATEGY.
 
@@ -461,6 +529,19 @@ else
   echo "ℹ️  Together AI not configured (optional — Wan 2.7 backend unavailable)"
 fi
 
+# Check Google Workspace
+if [ -f "__PLUGIN_DIR__/credentials.json" ] && [ -f "__PLUGIN_DIR__/token.json" ]; then
+  if node -e "import { findOrCreateFolder } from '__PLUGIN_DIR__/scripts/gdrive.mjs'; await findOrCreateFolder('EduVidGen'); console.log('ok');" 2>/dev/null | grep -q "ok"; then
+    echo "✅ Google Workspace connected (Drive, Docs, Sheets)"
+  else
+    echo "❌ Google Workspace auth failed — run /setup to reconfigure"
+  fi
+elif [ -f "__PLUGIN_DIR__/credentials.json" ]; then
+  echo "❌ Google Workspace: credentials.json found but token.json missing — run: node __PLUGIN_DIR__/scripts/google-auth.mjs"
+else
+  echo "⚠️ Google Workspace not configured — cloud-native features unavailable"
+fi
+
 # Check output dir
 if [ -n "$OUTPUT_BASE_DIR" ]; then
   mkdir -p "$OUTPUT_BASE_DIR" 2>/dev/null && echo "✅ Output directory: $OUTPUT_BASE_DIR" || echo "❌ Cannot create output directory: $OUTPUT_BASE_DIR"
@@ -471,7 +552,7 @@ fi
 
 ---
 
-## Step 7 — Summary
+## Step 8 — Summary
 
 Print final setup status. Adapt messaging based on AUTH_STRATEGY.
 
@@ -486,6 +567,7 @@ ElevenLabs:       {status}
 Vertex AI:        {status} (project: {project_id})
 Gemini API key:   {status — or "ℹ️ Not needed (using Vertex AI)"}
 Together AI:      {status}
+Google Workspace: {status — ✅ Connected (root folder: FOLDER_ID) or ❌ Not configured}
 Output directory: {path or "current directory"}
 Editor:           ✅ Dependencies installed
 
@@ -507,6 +589,7 @@ Prerequisites:    ✅ All installed
 ElevenLabs:       {status}
 Gemini API key:   {status}
 Together AI:      {status}
+Google Workspace: {status — ✅ Connected (root folder: FOLDER_ID) or ❌ Not configured}
 Output directory: {path or "current directory"}
 Editor:           ✅ Dependencies installed
 
