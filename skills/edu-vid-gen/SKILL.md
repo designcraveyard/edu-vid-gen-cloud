@@ -653,6 +653,74 @@ For each clip:
 
 Wait 60-90s between Veo calls.
 
+### Phase 4 — Drive Sync & Review (Gate G6)
+
+After all video clips (AC and TC) are generated and validated, sync to Drive and wait for client review.
+
+**Step 4-G6a — Upload video clips to Drive:**
+```bash
+for clip in "$OUTPUT_DIR"/clips/clip-*.mp4 "$OUTPUT_DIR"/clips-transition/tc-*.mp4; do
+  node "__PLUGIN_DIR__/scripts/sync-to-drive.mjs" \
+    --file "$clip" --subfolder "clips" \
+    --project-folder-id "$PROJECT_FOLDER_ID"
+done
+```
+
+**Step 4-G6b — Log to tracker (Review tab):**
+
+For each video clip:
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Review" \
+  --values '["{PROJECT}", "{CLIP_NUM}", "Video Clip", "{drive_link}", "Pending Review", ""]'
+```
+
+**Step 4-G6c — Log to tracker (Generation Log tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Generation Log" \
+  --values '["{TIMESTAMP}", "Phase 4", "Video Clip", "{filename}", "Generated", "{model}", "{cost}", "{duration}", "{resolution}", "{strategy}", "{attempt}", "{validation_score}", "{sync_score}", "{style_score}", "{text_score}", "{motion_score}", "{audio_score}", "{notes}", "{prompt_hash}", "{drive_link}", "{local_path}", "{clip_num}"]'
+```
+
+**Step 4-G6d — Log to tracker (Prompts tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Prompts" \
+  --values '["{TIMESTAMP}", "Video Clip", "{filename}", "{prompt_text}"]'
+```
+
+**Step 4-G6e — Gate G6: Share and STOP.**
+
+Present to client:
+```
+🎬 REVIEW GATE G6 — Video Clips
+
+All video clips have been uploaded for review:
+• Drive folder: [link to clips subfolder]
+• Review tracker: [link to tracker → Review tab]
+
+Please review each video clip and set Status to "Approved" or "Rejected" (with notes in the tracker).
+
+⏸️ STOPPING — waiting for your review. Reply here when done.
+```
+
+**STOP.** Do not proceed until the client replies.
+
+**Step 4-G6f — Read review and check approval:**
+```bash
+node "__PLUGIN_DIR__/scripts/read-review.mjs" \
+  --type sheet --id "$TRACKER_SHEET_ID" --tab "Review" \
+  --filter-status "Rejected"
+```
+
+If any rows are rejected:
+1. Read the reviewer notes for each rejected video clip
+2. Summarize what was rejected and why
+3. Regenerate only the rejected clips with updated prompts
+4. Re-upload the regenerated clips to Drive (same subfolder)
+5. Update the Review tab rows with new links and reset status to "Pending Review"
+6. Return to Gate G6 (re-share links and STOP again)
+
 **GATE:**
 ```bash
 python3 __PLUGIN_DIR__/scripts/checkpoint.py --phase 4 --output-dir "{OUTPUT_DIR}"
@@ -723,6 +791,72 @@ open "{OUTPUT_DIR}"
 
 Report: output folder, script, characters, prompts, voiceover, frames, clips, final video, metadata, editor URL.
 
+### Phase 5 — Drive Sync & Review (Gate G7)
+
+After the final composite video is rendered and validated, sync to Drive and wait for client review.
+
+**Step 5-G7a — Upload final video to Drive:**
+```bash
+node "__PLUGIN_DIR__/scripts/sync-to-drive.mjs" \
+  --file "$OUTPUT_DIR/final.mp4" --subfolder "final" \
+  --project-folder-id "$PROJECT_FOLDER_ID"
+```
+
+**Step 5-G7b — Log to tracker (Review tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Review" \
+  --values '["{PROJECT}", "", "Final MP4", "{drive_link}", "Pending Review", ""]'
+```
+
+**Step 5-G7c — Log to tracker (Generation Log tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Generation Log" \
+  --values '["{TIMESTAMP}", "Phase 5", "Final MP4", "final.mp4", "Composited", "MoviePy", "$0.00", "{duration}", "{resolution}", "{strategy}", "1", "{avg_score}", "{sync_score}", "{style_score}", "{text_score}", "{motion_score}", "{audio_score}", "{ship_ready}", "", "{drive_link}", "{local_path}", ""]'
+```
+
+**Step 5-G7d — Log to tracker (Prompts tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Prompts" \
+  --values '["{TIMESTAMP}", "Final MP4", "final.mp4", "Composite settings: transitions={transition_types}, sfx_vol=0.35, ambient_vol=0.15"]'
+```
+
+**Step 5-G7e — Gate G7: Share and STOP.**
+
+Present to client:
+```
+🎥 REVIEW GATE G7 — Final Composite Video
+
+The final composited video has been uploaded for review:
+• Drive folder: [link to final subfolder]
+• Direct link: [link to final.mp4]
+• Review tracker: [link to tracker → Review tab]
+
+Please watch the full video and set Status to "Approved" or "Rejected" (with notes in the tracker).
+
+⏸️ STOPPING — waiting for your review. Reply here when done.
+```
+
+**STOP.** Do not proceed until the client replies.
+
+**Step 5-G7f — Read review and check approval:**
+```bash
+node "__PLUGIN_DIR__/scripts/read-review.mjs" \
+  --type sheet --id "$TRACKER_SHEET_ID" --tab "Review" \
+  --filter-status "Rejected"
+```
+
+If any rows are rejected:
+1. Read the reviewer notes for the rejected composite
+2. Summarize what was rejected and why
+3. Fix the compositing issues (adjust transitions, volumes, timing)
+4. Re-render using composite.py with updated settings
+5. Re-upload the new final.mp4 to Drive (same subfolder)
+6. Update the Review tab row with new link and reset status to "Pending Review"
+7. Return to Gate G7 (re-share links and STOP again)
+
 **GATE:**
 ```bash
 python3 __PLUGIN_DIR__/scripts/checkpoint.py --phase 5 --output-dir "{OUTPUT_DIR}"
@@ -767,6 +901,145 @@ GEMINI_API_KEY="$GEMINI_API_KEY" node __PLUGIN_DIR__/scripts/extend-image.mjs \
   --direction "{direction}" --extend-by 30 --style "{style}"
 ```
 Directions: left, right, top, bottom, corners, all. Styles: gradient, flat, blur. Wait 35s between calls.
+
+### Phase 6 — Drive Sync & Review (Gate G8)
+
+After any post-production enhancements are applied (print-ready images, image extensions, NLE exports, re-renders), sync the final deliverables to Drive and wait for client sign-off.
+
+**Step 6-G8a — Upload post-production assets to Drive:**
+```bash
+# Upload re-rendered final if it exists
+if [ -f "$OUTPUT_DIR/final-edited.mp4" ]; then
+  node "__PLUGIN_DIR__/scripts/sync-to-drive.mjs" \
+    --file "$OUTPUT_DIR/final-edited.mp4" --subfolder "final" \
+    --project-folder-id "$PROJECT_FOLDER_ID"
+fi
+
+# Upload NLE exports if they exist
+for export_file in "$OUTPUT_DIR"/export/project.*; do
+  node "__PLUGIN_DIR__/scripts/sync-to-drive.mjs" \
+    --file "$export_file" --subfolder "final" \
+    --project-folder-id "$PROJECT_FOLDER_ID"
+done
+
+# Upload print-ready images if they exist
+for print_img in "$OUTPUT_DIR"/images/print/*; do
+  node "__PLUGIN_DIR__/scripts/sync-to-drive.mjs" \
+    --file "$print_img" --subfolder "final" \
+    --project-folder-id "$PROJECT_FOLDER_ID"
+done
+```
+
+**Step 6-G8b — Log to tracker (Review tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Review" \
+  --values '["{PROJECT}", "", "Final MP4", "{drive_link}", "Pending Review", ""]'
+```
+
+**Step 6-G8c — Log to tracker (Generation Log tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Generation Log" \
+  --values '["{TIMESTAMP}", "Phase 6", "Final MP4", "{filename}", "Post-production", "N/A", "$0.00", "{duration}", "{resolution}", "N/A", "1", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "{enhancements_applied}", "", "{drive_link}", "{local_path}", ""]'
+```
+
+**Step 6-G8d — Log to tracker (Prompts tab):**
+```bash
+node "__PLUGIN_DIR__/scripts/gsheets.mjs" append \
+  --sheet-id "$TRACKER_SHEET_ID" --tab "Prompts" \
+  --values '["{TIMESTAMP}", "Final MP4", "{filename}", "Post-production: {enhancements_list}"]'
+```
+
+**Step 6-G8e — Gate G8: Share and STOP.**
+
+Present to client:
+```
+✅ REVIEW GATE G8 — Post-Production Deliverables
+
+Post-production deliverables have been uploaded:
+• Drive folder: [link to final subfolder]
+• Review tracker: [link to tracker → Review tab]
+
+Assets delivered:
+- [list of uploaded assets: re-rendered MP4, NLE exports, print images, etc.]
+
+Please review and set Status to "Approved" or "Rejected" (with notes in the tracker).
+
+⏸️ STOPPING — waiting for your final sign-off. Reply here when done.
+```
+
+**STOP.** Do not proceed until the client replies.
+
+**Step 6-G8f — Read review and check approval:**
+```bash
+node "__PLUGIN_DIR__/scripts/read-review.mjs" \
+  --type sheet --id "$TRACKER_SHEET_ID" --tab "Review" \
+  --filter-status "Rejected"
+```
+
+If any rows are rejected:
+1. Read the reviewer notes for each rejected deliverable
+2. Summarize what was rejected and why
+3. Re-apply post-production with updated settings
+4. Re-upload the fixed deliverables to Drive (same subfolder)
+5. Update the Review tab rows with new links and reset status to "Pending Review"
+6. Return to Gate G8 (re-share links and STOP again)
+
+---
+
+## Milestone Restart
+
+At any review gate (G3-G8), the client can request: **"Redo from Phase X."** This allows restarting the pipeline from a specific phase while preserving approved work from earlier phases.
+
+### How Milestone Restart Works
+
+1. **Client triggers restart** — At any gate, client says something like "redo from Phase 3" or "change the character and redo"
+2. **Claude asks what to keep/redo** — Confirm which phases to preserve and which to regenerate:
+   - "Which earlier assets should I keep as-is?"
+   - "What specifically should change in the redo?"
+3. **Mark affected tracker rows** — For all assets from the restart phase onward:
+   ```bash
+   node "__PLUGIN_DIR__/scripts/gsheets.mjs" update \
+     --sheet-id "$TRACKER_SHEET_ID" --tab "Review" \
+     --filter-phase ">={RESTART_PHASE}" \
+     --set-status "Redo Pending"
+   ```
+4. **Re-run from the specified phase** — Execute all phases from the restart point forward, with all gates (G3-G8) active. Earlier phases' assets remain untouched.
+
+### Restart Examples
+
+**Example 1: Change character design**
+- Client says: "I want a different character. Redo from Phase 2.1."
+- Keep: Brief (Phase 2), audio/VO (Phase 2.5)
+- Redo: Character sheets (2.1) → Keyframes (3) → Video clips (4) → Composite (5) → Post-production (6)
+- All gates G3-G8 are active during the redo
+
+**Example 2: Redo compositing only**
+- Client says: "The transitions are too fast. Redo compositing."
+- Keep: Everything through Phase 4 (characters, audio, keyframes, clips)
+- Redo: Composite (5) → Post-production (6)
+- Gates G7-G8 are active during the redo
+
+**Example 3: Change VO voice**
+- Client says: "Use a different voice. Redo from audio."
+- Keep: Brief (Phase 2), character sheets (Phase 2.1)
+- Redo: Audio (2.5) → Keyframes (3, if timing changed) → Video clips (4) → Composite (5) → Post-production (6)
+- Gates G4-G8 are active during the redo
+
+**Example 4: Redo specific clips only**
+- Client says: "Clips 3 and 7 look wrong. Redo just those."
+- Keep: Everything except clips 3 and 7
+- Redo: Only clips 3 and 7 in Phase 4, then re-composite in Phase 5
+- Mark only clip-03 and clip-07 rows as "Redo Pending"
+- Gates G6-G8 are active during the redo
+
+### Restart Rules
+
+- Earlier phases are NEVER re-run unless explicitly requested
+- All gates from the restart phase onward remain active — no skipping reviews
+- The tracker preserves history: old rows stay with "Superseded" status, new rows are appended
+- If the restart changes clip count or timing (e.g., new VO), downstream phases must regenerate fully
 
 ---
 
