@@ -115,6 +115,143 @@ Present brief as:
 
 Save to `$OUTPUT_DIR/script.md`. Ask for approval before proceeding.
 
+### Phase 2 — Drive Sync & Review (Gate G2)
+
+After the brief is approved locally, sync everything to Google Drive and wait for client review.
+
+**Step 2-G2a — Upload brief to Drive:**
+```bash
+node __PLUGIN_DIR__/scripts/sync-to-drive.mjs \
+  --file "$OUTPUT_DIR/script.md" --subfolder "brief" \
+  --manifest "$OUTPUT_DIR/drive-manifest.json"
+```
+
+**Step 2-G2b — Update brief.gdoc with narration script:**
+```bash
+node __PLUGIN_DIR__/scripts/gdocs.mjs update \
+  --doc-id "$(jq -r '.briefDocId' $OUTPUT_DIR/drive-manifest.json)" \
+  --section "Narration Script" \
+  --content-file "$OUTPUT_DIR/script.md"
+```
+
+**Step 2-G2c — Populate timeline.gsheet with clip rows:**
+
+For each clip in the brief's keyframe table, append a row to the Timeline tab:
+```bash
+node __PLUGIN_DIR__/scripts/gsheets.mjs append \
+  --spreadsheet-id "$(jq -r '.trackerSheetId' $OUTPUT_DIR/drive-manifest.json)" \
+  --tab "Timeline" \
+  --row '{
+    "Clip #": "{NN}",
+    "Timestamp": "{timestamp}",
+    "Scene Description": "{scene_desc}",
+    "Narration": "{narration_text}",
+    "Visual Notes": "{visual_notes}",
+    "Text Overlay": "{text}",
+    "Transition": "{transition}",
+    "Sound Cue": "{sound_cue}",
+    "Duration": "{duration}",
+    "Status": "Pending Review",
+    "Reviewer Notes": ""
+  }'
+```
+
+**Step 2-G2d — Gate G2: Share and STOP.**
+
+Present to client:
+```
+📋 REVIEW GATE G2 — Brief & Timeline
+
+Your video brief and timeline are ready for review:
+• Brief: [link to brief.gdoc]
+• Timeline: [link to timeline.gsheet → Timeline tab]
+
+Please review each timeline row and set Status to "Approved" or "Rejected" (with notes).
+
+⏸️ STOPPING — waiting for your review. Reply here when done.
+```
+
+**STOP.** Do not proceed until the client replies.
+
+**Step 2-G2e — Read review and check approval:**
+```bash
+node __PLUGIN_DIR__/scripts/read-review.mjs \
+  --spreadsheet-id "$(jq -r '.trackerSheetId' $OUTPUT_DIR/drive-manifest.json)" \
+  --tab "Timeline"
+```
+
+Check that ALL rows have Status = "Approved". If any row is "Rejected":
+1. Read the Reviewer Notes for each rejected row
+2. Summarize what was rejected and why
+3. Revise the rejected clips in the brief
+4. Re-upload to brief.gdoc and update the timeline.gsheet rows
+5. Return to Gate G2 (re-share links and STOP again)
+
+### Phase 2 — Cost Approval (Gate G0)
+
+After timeline is approved (G2 passed), estimate costs and get client sign-off before spending money.
+
+**Step 2-G0a — Estimate cost:**
+```bash
+node __PLUGIN_DIR__/scripts/budget-tiers.mjs estimate \
+  --tier "$BUDGET_TIER" \
+  --clip-count "$(jq '.total_clips' $OUTPUT_DIR/audio/timeline.json 2>/dev/null || echo $(grep -c '|' $OUTPUT_DIR/script.md))"
+```
+
+**Step 2-G0b — Append cost breakdown to brief.gdoc:**
+```bash
+node __PLUGIN_DIR__/scripts/gdocs.mjs update \
+  --doc-id "$(jq -r '.briefDocId' $OUTPUT_DIR/drive-manifest.json)" \
+  --section "Estimated Cost & Time" \
+  --content "$(cat <<'COST_EOF'
+## Estimated Cost & Time
+
+Budget tier: [selected tier]
+Estimated total cost: $X.XX (₹X.X)
+Estimated completion time: ~XX minutes
+
+### Cost Breakdown
+| Phase                | Est. Cost (USD) | Est. Cost (INR) |
+|----------------------|-----------------|-----------------|
+| Character Sheets     | $X.XX           | ₹X.X            |
+| Keyframe Images (N)  | $X.XX           | ₹X.X            |
+| Voiceover            | $X.XX           | ₹X.X            |
+| Video Clips (N)      | $X.XX           | ₹X.X            |
+| Ambient Audio        | $X.XX           | ₹X.X            |
+| Compositing          | $0.00           | ₹0.0 (local)    |
+| Validation           | $X.XX           | ₹X.X            |
+| TOTAL                | $X.XX           | ₹X.X            |
+COST_EOF
+)"
+```
+
+Replace the `$X.XX` placeholders with actual values from the `estimateCost()` output.
+
+**Step 2-G0c — Gate G0: Share and STOP.**
+
+Present to client:
+```
+💰 COST APPROVAL GATE G0
+
+Estimated cost breakdown has been added to your brief:
+• Brief: [link to brief.gdoc → "Estimated Cost & Time" section]
+
+Budget tier: [tier]
+Total estimated cost: $X.XX (₹X.X)
+Estimated time: ~XX minutes
+
+Options:
+1. ✅ Approve — proceed with generation
+2. 🔄 Change tier — switch to low/medium/high tier
+3. ❌ Cancel — stop the pipeline
+
+⏸️ STOPPING — waiting for cost approval. Reply here with your choice.
+```
+
+**STOP.** Do not proceed until the client approves.
+
+If client changes tier, re-run `estimateCost()` with the new tier and re-present. If client cancels, end the pipeline gracefully.
+
 ### Phase 2.1 — Character Sheets (if `CHARACTER_MODE != none`)
 
 ```bash
