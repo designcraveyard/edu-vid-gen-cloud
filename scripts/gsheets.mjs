@@ -9,6 +9,8 @@
  *   node gsheets.mjs create --title "Project Tracker" --parent FOLDER_ID --tabs "Review,Generation Log,Prompts,Cost Summary"
  *   node gsheets.mjs read --sheet-id ID --range "Review!A1:F10"
  *   node gsheets.mjs append --sheet-id ID --tab "Review" --values '["project","1","Keyframe","link","Pending",""]'
+ *
+ *   Note: All commands use --sheet-id (not --id) for the spreadsheet identifier.
  *   node gsheets.mjs update --sheet-id ID --range "Review!E2" --value "Approved"
  */
 
@@ -212,8 +214,11 @@ export async function createTimelineSheet(title, parentFolderId) {
 
 // ── CLI mode ──
 
+import { fileURLToPath } from 'url';
+const __filename_sheets = fileURLToPath(import.meta.url);
+const isMain = process.argv[1] === __filename_sheets;
 const command = process.argv[2];
-if (command && !process.argv[1].endsWith('.test.mjs')) {
+if (isMain && command) {
   const get = (flag, def = null) => { const i = process.argv.indexOf(flag); return i !== -1 ? process.argv[i + 1] : def; };
 
   try {

@@ -28,10 +28,17 @@ function probeDuration(filePath: string): number {
   }
 }
 
-/** Extract clip number from filename like clip-01.mp4, ac-03.mp4, tc-02.mp4, slice-05.mp3, vo-01.mp3 */
+/** Extract clip number from filename like clip-01.mp4, clip-p1-01.mp4, ac-03.mp4, tc-02.mp4, slice-05.mp3, slice-p1-05.mp3, vo-01.mp3 */
 function extractClipNum(filename: string): number {
-  const m = filename.match(/(?:clip|ac|tc|slice|vo)-(\d+)/);
+  // Match both prefixed (clip-p1-01) and plain (clip-01) patterns
+  const m = filename.match(/(?:clip|ac|tc|slice|vo)-(?:p\d+-)?(\d+)/);
   return m ? parseInt(m[1], 10) : 0;
+}
+
+/** Extract part prefix from filename like clip-p1-01.mp4 → "p1", clip-01.mp4 → "" */
+function extractPartPrefix(filename: string): string {
+  const m = filename.match(/(?:clip|ac|tc|slice|vo)-(p\d+)-\d+/);
+  return m ? m[1] : '';
 }
 
 /**
@@ -86,10 +93,10 @@ export function loadProject(projectDir: string): ProjectData {
   const audioDir = join(projectDir, 'audio');
   const tcDir = join(projectDir, 'clips-transition');
 
-  // ── Video clips: match clip-XX.mp4 AND ac-XX.mp4 ──────────────────────────
+  // ── Video clips: match clip-XX.mp4, clip-pN-XX.mp4, ac-XX.mp4, ac-pN-XX.mp4
   const videoFiles = existsSync(clipsDir)
     ? readdirSync(clipsDir)
-        .filter(f => /^(clip|ac)-\d+\.mp4$/.test(f))
+        .filter(f => /^(clip|ac)-(p\d+-)?(\d+)\.mp4$/.test(f))
         .sort((a, b) => extractClipNum(a) - extractClipNum(b))
         .map(f => ({
           name: f,
@@ -102,7 +109,7 @@ export function loadProject(projectDir: string): ProjectData {
   // ── Transition clips: tc-XX.mp4 from clips-transition/ ────────────────────
   const tcFiles = existsSync(tcDir)
     ? readdirSync(tcDir)
-        .filter(f => /^tc-\d+\.mp4$/.test(f))
+        .filter(f => /^tc-(p\d+-)?(\d+)\.mp4$/.test(f))
         .sort((a, b) => extractClipNum(a) - extractClipNum(b))
         .map(f => ({
           name: f,
@@ -112,10 +119,10 @@ export function loadProject(projectDir: string): ProjectData {
         }))
     : [];
 
-  // ── Audio slices: match vo-XX.mp3 AND slice-XX.mp3 ────────────────────────
+  // ── Audio slices: match vo-XX.mp3, slice-XX.mp3, slice-pN-XX.mp3, vo-pN-XX.mp3
   const audioFiles = existsSync(audioDir)
     ? readdirSync(audioDir)
-        .filter(f => /^(vo|slice)-\d+\.mp3$/.test(f))
+        .filter(f => /^(vo|slice)-(p\d+-)?(\d+)\.mp3$/.test(f))
         .sort((a, b) => extractClipNum(a) - extractClipNum(b))
         .map(f => ({
           name: f,

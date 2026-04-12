@@ -38,6 +38,7 @@ def parse_args():
     p.add_argument("--ambient", default=None, help="Path to ambient loop MP3 file")
     p.add_argument("--ambient-volume", type=float, default=0.15, help="Ambient loop volume (default 0.15)")
     p.add_argument("--xfade", type=float, default=0.75, help="Crossfade duration in seconds (default 0.75)")
+    p.add_argument("--clip-prefix", default="", help="Clip filename prefix for multi-part videos (e.g. 'p1' → clip-p1-01.mp4)")
     return p.parse_args()
 
 
@@ -74,9 +75,16 @@ def main():
     # ── Step 1: Build segment list [AC1, TC1, AC2, TC2, ..., ACn] ──
 
     segments = []  # list of (type, path, clip_num)
+    pfx = args.clip_prefix
     for i, cd in enumerate(clips_data):
         clip_num = cd["clip"]
-        clip_path = os.path.join(args.clips_dir, f"clip-{clip_num:02d}.mp4")
+        # Try prefixed name first (multi-part), fall back to plain
+        if pfx:
+            clip_path = os.path.join(args.clips_dir, f"clip-{pfx}-{clip_num:02d}.mp4")
+            if not os.path.exists(clip_path):
+                clip_path = os.path.join(args.clips_dir, f"clip-{clip_num:02d}.mp4")
+        else:
+            clip_path = os.path.join(args.clips_dir, f"clip-{clip_num:02d}.mp4")
         if not os.path.exists(clip_path):
             print(f"ERROR: {clip_path} not found")
             sys.exit(1)
@@ -84,11 +92,14 @@ def main():
 
         # Add TC after every AC except the last
         if i < n_clips - 1 and args.veo_tcs_dir:
-            tc_path = os.path.join(args.veo_tcs_dir, f"tc-{clip_num:02d}.mp4")
+            tc_name = f"tc-{pfx}-{clip_num:02d}.mp4" if pfx else f"tc-{clip_num:02d}.mp4"
+            tc_path = os.path.join(args.veo_tcs_dir, tc_name)
+            if not os.path.exists(tc_path) and pfx:
+                tc_path = os.path.join(args.veo_tcs_dir, f"tc-{clip_num:02d}.mp4")
             if os.path.exists(tc_path):
                 segments.append(("TC", tc_path, clip_num))
             else:
-                print(f"  WARNING: TC-{clip_num:02d} not found at {tc_path}, skipping transition")
+                print(f"  WARNING: TC-{clip_num:02d} not found, skipping transition")
 
     print(f"\nSegment order ({len(segments)} segments):")
     for seg_type, seg_path, seg_num in segments:
@@ -145,7 +156,10 @@ def main():
     ac_index = 0
     for i, (seg_type, seg_path, seg_num) in enumerate(segments):
         if seg_type == "AC":
-            slice_path = os.path.join(vo_slices_dir, f"slice-{seg_num:02d}.mp3")
+            slice_name = f"slice-{pfx}-{seg_num:02d}.mp3" if pfx else f"slice-{seg_num:02d}.mp3"
+            slice_path = os.path.join(vo_slices_dir, slice_name)
+            if not os.path.exists(slice_path) and pfx:
+                slice_path = os.path.join(vo_slices_dir, f"slice-{seg_num:02d}.mp3")
             if os.path.exists(slice_path):
                 vo_slice = AudioFileClip(slice_path)
                 vo_slice = vo_slice.with_start(segment_starts[i])

@@ -18,6 +18,8 @@ import { execFile } from 'child_process';
 const args = process.argv.slice(2);
 const get = (flag, def = null) => { const i = args.indexOf(flag); return i !== -1 ? args[i + 1] : def; };
 
+const forceReauth = args.includes('--force');
+
 const SCOPES = [
   'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/documents',
@@ -40,8 +42,8 @@ if (!client_id || !client_secret) {
   process.exit(1);
 }
 
-// Check for existing valid token
-if (existsSync(tokenPath)) {
+// Check for existing valid token (skip if --force)
+if (existsSync(tokenPath) && !forceReauth) {
   const token = JSON.parse(readFileSync(tokenPath, 'utf-8'));
   const oauth2 = new google.auth.OAuth2(client_id, client_secret);
   oauth2.setCredentials(token);
@@ -50,6 +52,7 @@ if (existsSync(tokenPath)) {
     const drive = google.drive({ version: 'v3', auth: oauth2 });
     const aboutRes = await drive.about.get({ fields: 'user' });
     const email = aboutRes.data.user.emailAddress;
+    console.log(`CURRENT_ACCOUNT=${email}`);
     console.log(`Already authenticated as ${email}`);
     console.log(`  Token: ${tokenPath}`);
 
@@ -63,10 +66,15 @@ if (existsSync(tokenPath)) {
   } catch (err) {
     console.log('Existing token expired or invalid. Re-authenticating...');
   }
+} else if (forceReauth && existsSync(tokenPath)) {
+  console.log('Force re-auth requested. Removing old token...');
+  const { unlinkSync } = await import('fs');
+  unlinkSync(tokenPath);
 }
 
 // New auth flow — start local server to receive callback
 const oauth2 = new google.auth.OAuth2(client_id, client_secret, 'http://localhost:3847/callback');
+// prompt: 'consent' forces account chooser so user can pick the right account
 const authUrl = oauth2.generateAuthUrl({ access_type: 'offline', scope: SCOPES, prompt: 'consent' });
 
 console.log('\n--- Google Workspace Authentication ---');

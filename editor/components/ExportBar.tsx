@@ -8,9 +8,10 @@ interface ExportBarProps {
   onRender: () => Promise<void>;
   onExportXML: () => Promise<void>;
   onExportAE: () => Promise<void>;
+  onExportEDL: () => Promise<void>;
 }
 
-type OperationKey = 'save' | 'render' | 'xml' | 'ae';
+type OperationKey = 'save' | 'render' | 'xml' | 'ae' | 'edl';
 
 interface StatusState {
   message: string;
@@ -20,8 +21,9 @@ interface StatusState {
 const OPERATION_LABELS: Record<OperationKey, { busy: string; success: string }> = {
   save:   { busy: 'Saving timeline…',         success: 'Timeline saved.' },
   render: { busy: 'Rendering MP4…',           success: 'Render complete.' },
-  xml:    { busy: 'Exporting Premiere XML…',  success: 'Premiere XML exported.' },
+  xml:    { busy: 'Exporting DaVinci XML…',   success: 'DaVinci XML exported.' },
   ae:     { busy: 'Exporting AE script…',     success: 'AE script exported.' },
+  edl:    { busy: 'Exporting Premiere EDL…',  success: 'Premiere EDL exported.' },
 };
 
 export default function ExportBar({
@@ -30,6 +32,7 @@ export default function ExportBar({
   onRender,
   onExportXML,
   onExportAE,
+  onExportEDL,
 }: ExportBarProps) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<StatusState>({ message: '', kind: 'idle' });
@@ -78,13 +81,22 @@ export default function ExportBar({
         Render MP4
       </button>
 
-      {/* Export Premiere XML */}
+      {/* Export DaVinci XML */}
       <button
         onClick={() => run('xml', onExportXML)}
         disabled={busy}
         className="px-3 py-1.5 text-sm rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
-        Export Premiere XML
+        DaVinci XML
+      </button>
+
+      {/* Export Premiere EDL */}
+      <button
+        onClick={() => run('edl', onExportEDL)}
+        disabled={busy}
+        className="px-3 py-1.5 text-sm rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >
+        Premiere EDL
       </button>
 
       {/* Export AE Script */}
@@ -93,7 +105,7 @@ export default function ExportBar({
         disabled={busy}
         className="px-3 py-1.5 text-sm rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
-        Export AE Script
+        AE Script
       </button>
 
       {/* Spinner + status */}

@@ -1,6 +1,29 @@
-# edu-vid-gen Plugin — Developer Guide
+# CLAUDE.md
 
-This file helps Claude Code (and QA team members) understand and modify this plugin.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Development Commands
+
+```bash
+# Scripts (Node.js) — install deps
+cd scripts && npm install
+
+# Editor (Next.js timeline editor) — dev server on port 3333
+cd editor && npm install && npm run dev
+
+# Python scripts require: moviepy, google-genai, Pillow, requests
+# Install: pip3 install moviepy google-genai Pillow requests
+
+# Run a single script
+node scripts/gdrive.mjs <action> [args]
+python3 scripts/composite.py --timeline timeline.json --output final.mp4
+python3 scripts/generate-video.py --backend veo --image start.jpg --prompt "..." --duration 8 --output clip.mp4
+
+# First-time setup (OAuth + API keys)
+# Use the /setup skill in Claude Code
+```
+
+## What This Plugin Does
 
 ## What This Plugin Does
 

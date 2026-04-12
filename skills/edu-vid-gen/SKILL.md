@@ -7,6 +7,12 @@ description: Generate an educational explainer video for a given topic and schoo
 
 Follow each phase exactly and in order. Heavy content lives in `references/` — load only when needed.
 
+## Real-Time Tracker Logging
+
+**CRITICAL:** Log to the Google Sheets tracker **immediately** after each operation — do NOT batch logs at the end of a phase. Every API call (image, video, VO, ambient), every review gate decision, every prompt, and every cost incurrence must be logged within the same step that performs the operation.
+
+Use this pattern: after each generation call, immediately append to the relevant tracker tabs (Generation Log, Prompts, Cost Summary) before proceeding to the next generation. The Review tab is updated when assets are uploaded for review. The Cost Summary tab maintains a running total — update it after every billable API call.
+
 ## Scripts & Auth Setup
 
 Scripts live at: `__PLUGIN_DIR__/scripts/`
@@ -44,6 +50,8 @@ set -a; source "__PLUGIN_DIR__/.env" 2>/dev/null; set +a
 ---
 
 ## Phase 1 — Collect Inputs
+
+**IMPORTANT:** Use the `AskUserQuestion` tool for EVERY input below. Collect one question at a time with clear defaults and options shown. Do NOT dump all questions in a single text block.
 
 Ask the user:
 
@@ -84,7 +92,19 @@ Ask the user:
    - **Bundled loops** (zero cost, instant): `forest`, `rain`, `ocean`, `space`, `underwater`, `workshop`, `lab`, `garden`. Stored in repo `ambient-loops/` dir.
    - **ElevenLabs generation** (`--generate-ambient`): For vibes not covered by bundled loops. Costs ~$0.04 per 30s clip.
    - Save as `AMBIENT_CATEGORY` (or `none`).
-10. **Budget tier** — Low / Medium / High
+10. **Subtitles** — Yes / No (default: Yes)
+    - If Yes, generate two final outputs: `final.mp4` (clean) and `final-subtitled.mp4` (karaoke-style subtitles)
+    - Also generate `subtitles.srt` as a standalone file
+    - Subtitle positioning adapts to aspect ratio: bottom-center for 9:16, lower-third for 16:9
+    - Save as `SUBTITLES_ENABLED`
+11. **Annotations/Labels** — Yes / No (smart defaults based on topic)
+    - **Science** (biology, physics, chemistry): Recommend **Yes** — label body parts, forces, reactions, molecules
+    - **Math**: Recommend **Yes** — label equations, steps, geometric shapes
+    - **Story/Narrative**: Recommend **No**
+    - **Language**: Recommend **No** (subtitles are sufficient)
+    - If Yes, annotations are defined per-clip in the brief (Phase 2) and rendered by the compositor
+    - Save as `ANNOTATIONS_ENABLED`
+12. **Budget tier** — Low / Medium / High
     - **Low**: Minimal cost. Veo Fast (no audio), MoviePy transitions, bundled ambient loops, Flash v2.5 voice model. Best for drafts or budget-conscious projects.
     - **Medium**: Balanced. Model intelligently decides transitions and ambient. Eleven v3 voice. Good default.
     - **High**: Quality-driven. Video-first compositing, generated transition clips, ElevenLabs ambient, sound effects, Eleven v3 voice.
@@ -97,7 +117,7 @@ Ask the user:
     
     Use `tierConfig` throughout all subsequent phases to select models, transition strategy, and compositing script.
 
-Save variables: `TOPIC`, `CLASS`, `NARRATION_LANG`, `CHAPTER_SOURCE`, `STYLE`, `CHARACTER_MODE`, `DURATION_SEC`, `ASPECT`, `AMBIENT_CATEGORY`, `BUDGET_TIER`
+Save variables: `TOPIC`, `CLASS`, `NARRATION_LANG`, `CHAPTER_SOURCE`, `STYLE`, `CHARACTER_MODE`, `DURATION_SEC`, `ASPECT`, `AMBIENT_CATEGORY`, `SUBTITLES_ENABLED`, `ANNOTATIONS_ENABLED`, `BUDGET_TIER`
 
 Create output folder:
 ```bash
@@ -144,6 +164,174 @@ Check for any changes the client made. Apply changes before proceeding to Phase 
 
 **If chapter source provided:** Read it first. Use the textbook's exact definitions and terminology.
 
+### Phase 2.0 — Content Length Check (Multi-Part Decision)
+
+If a chapter source was provided (PDF, URL, or text), estimate its narration-worthy content length:
+- Count words or estimate from page count (~250 words/page)
+- A 90s video covers ~270 words of narration (150 WPM × 1.5 min)
+- If content fits in the chosen duration → proceed normally (single video)
+- If content exceeds ~270 words → trigger multi-part decision
+
+**If content is too long**, use **AskUserQuestion**:
+
+> The chapter content (~{WORD_COUNT} words) is too long for a single {DURATION_SEC}s video.
+>
+> How would you like to proceed?
+
+| Option | Description |
+|--------|-------------|
+| Summarize into one video | I'll condense the key points into a single {DURATION_SEC}s video. Some details will be cut. |
+| Split into multiple parts | Create a multi-part series. Each part ~60-90s, covering the full content. Same characters, style, and visual continuity throughout. |
+
+**If user chooses "Split into multiple parts":**
+
+1. Analyze the content and identify natural section boundaries (chapters, headings, topic shifts)
+2. Propose part boundaries with estimated duration per part:
+
+```
+Suggested multi-part breakdown:
+
+Part 1: "Introduction to the Water Cycle" (~75s, 8 clips)
+  - What is the water cycle?
+  - Key vocabulary
+
+Part 2: "Evaporation & Condensation" (~90s, 10 clips)
+  - How water evaporates
+  - Cloud formation
+
+Part 3: "Precipitation & Collection" (~70s, 8 clips)
+  - Rain, snow, sleet
+  - Water returns to Earth
+
+Total: 3 parts, ~235s combined
+```
+
+3. Use **AskUserQuestion** to confirm or let the user adjust boundaries
+4. Save as `MULTI_PART = true`, `TOTAL_PARTS = N`, and create `parts-manifest.json`:
+
+```json
+{
+  "multiPart": true,
+  "totalParts": 3,
+  "sharedAssets": {
+    "characters": "characters/",
+    "styleDescriptor": "style-descriptor.txt",
+    "voiceId": "ecp3DWciuUyW7BYM7II1",
+    "voiceModel": "eleven_v3",
+    "style": "Pixar",
+    "aspect": "16:9"
+  },
+  "parts": [
+    {
+      "part": 1,
+      "title": "Introduction to the Water Cycle",
+      "durationSec": 75,
+      "clipPrefix": "p1",
+      "timeline": "audio/timeline-p1.json",
+      "voFile": "audio/full-vo-p1.mp3",
+      "output": "final-part1.mp4",
+      "subtitledOutput": "final-part1-subtitled.mp4",
+      "intro": { "type": "hook", "description": "Full hook introducing the series" },
+      "outro": { "type": "full", "description": "Summary + 'Next: Evaporation & Condensation'" }
+    },
+    {
+      "part": 2,
+      "title": "Evaporation & Condensation",
+      "durationSec": 90,
+      "clipPrefix": "p2",
+      "timeline": "audio/timeline-p2.json",
+      "voFile": "audio/full-vo-p2.mp3",
+      "output": "final-part2.mp4",
+      "subtitledOutput": "final-part2-subtitled.mp4",
+      "intro": { "type": "recap", "description": "5s recap: 'In Part 1, we learned...' + title card" },
+      "outro": { "type": "full", "description": "Summary + 'Next: Precipitation & Collection'" }
+    },
+    {
+      "part": 3,
+      "title": "Precipitation & Collection",
+      "durationSec": 70,
+      "clipPrefix": "p3",
+      "timeline": "audio/timeline-p3.json",
+      "voFile": "audio/full-vo-p3.mp3",
+      "output": "final-part3.mp4",
+      "subtitledOutput": "final-part3-subtitled.mp4",
+      "intro": { "type": "recap", "description": "5s recap: 'So far, we learned...' + title card" },
+      "outro": { "type": "full", "description": "Series summary wrapping all parts" }
+    }
+  ]
+}
+```
+
+Save to `$OUTPUT_DIR/parts-manifest.json`.
+
+**Multi-part file naming convention:**
+- Images: `images/frame-p1-01.jpg`, `images/frame-p2-01.jpg` (reset per part)
+- Clips: `clips/clip-p1-01.mp4`, `clips/clip-p2-01.mp4` (reset per part)
+- Transition clips: `clips-transition/tc-p1-01.mp4`
+- Audio slices: `audio/slice-p1-01.mp3`, `audio/slice-p2-01.mp3`
+- Timelines: `audio/timeline-p1.json`, `audio/timeline-p2.json`
+- Full VO: `audio/full-vo-p1.mp3`, `audio/full-vo-p2.mp3`
+- Finals: `final-part1.mp4`, `final-part2.mp4`
+- Prompts: `prompts/frame-p1-01_prompt.md`, `prompts/clip-p2-03_prompt.md`
+
+All files stay in the same project folder — no subfolders per part.
+
+**Multi-part intro/outro structure:**
+
+| Part | Intro | Outro |
+|------|-------|-------|
+| Part 1 | Full hook (same as single video) | Summary of Part 1 + "Next: {Part 2 title}" teaser |
+| Parts 2..N-1 | 5s recap: "In Part {N-1}, we learned {key points}..." + title card "Part N: {title}" | Summary of this part + "Next: {Part N+1 title}" teaser |
+| Last part | 5s recap of previous parts + title card | Full series summary wrapping all parts together |
+
+The recap clip for parts 2+ is a **narrated segment** (not a visual flashback). It goes in the first clip slot of each part's timeline.
+
+### Multi-Part Pipeline Flow
+
+When `MULTI_PART = true`, the pipeline runs as a **phased hybrid**:
+
+1. **Shared phases (run once):**
+   - Phase 2.0: Multi-part decision + parts-manifest.json *(done)*
+   - Phase 2: Write ALL part briefs together in one document (one section per part)
+   - Phase 2.1: Character sheets (shared across all parts)
+   - Review gates G1-G3: Cover the full brief + characters for all parts
+
+2. **Per-part phases (run sequentially for each part):**
+   For each part in `parts-manifest.json`:
+   - Phase 2.5: Generate audio timeline for THIS part (`--prefix pN`, output `timeline-pN.json`)
+   - Phase 3: Generate keyframe images for THIS part (`frame-pN-01.jpg`, etc.)
+   - Phase 4: Generate video clips for THIS part (`clip-pN-01.mp4`, etc.)
+   - Phase 5: Composite THIS part (`--clip-prefix pN`, output `final-partN.mp4`)
+   - Review gates G4-G7 run per-part
+
+3. **Final review (Gate G8):** All parts reviewed together as a series
+
+**Compositor invocation for multi-part:**
+```bash
+python3 $COMPOSITOR \
+  --clips-dir "{OUTPUT_DIR}/clips" \
+  --timeline "{OUTPUT_DIR}/audio/timeline-p{N}.json" \
+  --vo-audio "{OUTPUT_DIR}/audio/full-vo-p{N}.mp3" \
+  --output "{OUTPUT_DIR}/final-part{N}.mp4" \
+  --veo-tcs-dir "{OUTPUT_DIR}/clips-transition" \
+  --clip-prefix "p{N}" \
+  --sfx-volume 0.35 \
+  --ambient "{AMBIENT_PATH}" --ambient-volume 0.15
+```
+
+**Slice audio invocation for multi-part:**
+```bash
+node __PLUGIN_DIR__/scripts/slice-audio.mjs \
+  --timeline "{OUTPUT_DIR}/audio/timeline-p{N}.json" \
+  --audio "{OUTPUT_DIR}/audio/full-vo-p{N}.mp3" \
+  --output-dir "{OUTPUT_DIR}/audio" \
+  --prefix "p{N}"
+```
+
+If `MULTI_PART = false` (single video), skip all of the above and proceed with the normal single-video flow below.
+
+---
+
 **Script guidelines:**
 - Each keyframe = 5-8 seconds. Total = `DURATION_SEC / 8` keyframes (round up).
 - Each narration segment = ~18-22 words (~150 WPM for 8s).
@@ -163,8 +351,21 @@ For 30s/45s clips: keep narration dense and focused on one single concept. No su
 
 **For prompt construction details:** Read `references/prompting.md`
 
+**If `ANNOTATIONS_ENABLED`:** For each clip in the brief, include an `annotations` field:
+```json
+{
+  "annotations": [
+    { "text": "Carnivore", "position": "top-right", "showAt": 2.0, "hideAt": 6.0, "style": "pill" }
+  ]
+}
+```
+- **Styles:** `pill` (rounded background), `arrow` (with pointer line), `label` (plain text with drop shadow)
+- **Positions:** `top-left`, `top-right`, `bottom-left`, `bottom-right`, `center-top`, `center-bottom`
+- Position adapts to aspect ratio — e.g. for 9:16, prefer `center-top` and `center-bottom` over side positions
+- Keep annotations concise (1-4 words), timed to appear when the narrator mentions the concept
+
 Present brief as:
-- Keyframe table: #, Timestamp, Scene Description, Narration, Visual Notes, Text, Transition, Sound Cue, Duration
+- Keyframe table: #, Timestamp, Scene Description, Narration, Visual Notes, Text, Transition, Sound Cue, Duration, Annotations (if enabled)
 - Scene wireframe diagrams (ASCII art showing composition)
 
 Save to `$OUTPUT_DIR/script.md`. Ask for approval before proceeding.
@@ -193,7 +394,7 @@ node __PLUGIN_DIR__/scripts/gdocs.mjs update \
 For each clip in the brief's keyframe table, append a row to the Timeline tab:
 ```bash
 node __PLUGIN_DIR__/scripts/gsheets.mjs append \
-  --id "$(jq -r '.trackerSheetId' $OUTPUT_DIR/drive-manifest.json)" \
+  --sheet-id "$(jq -r '.trackerSheetId' $OUTPUT_DIR/drive-manifest.json)" \
   --tab "Timeline" \
   --row '{
     "Clip #": "{NN}",
@@ -230,7 +431,7 @@ Please review each timeline row and set Status to "Approved" or "Rejected" (with
 **Step 2-G2e — Read review and check approval:**
 ```bash
 node __PLUGIN_DIR__/scripts/read-review.mjs \
-  --id "$(jq -r '.trackerSheetId' $OUTPUT_DIR/drive-manifest.json)" \
+  --sheet-id "$(jq -r '.trackerSheetId' $OUTPUT_DIR/drive-manifest.json)" \
   --tab "Timeline"
 ```
 
@@ -308,13 +509,26 @@ If client changes tier, re-run `estimateCost()` with the new tier and re-present
 
 ### Phase 2.1 — Character Sheets (if `CHARACTER_MODE != none`)
 
+**Step 1 — Generate a shared style descriptor** before any character prompts. This ensures visual consistency across all characters. The style descriptor is a single sentence that defines the exact aesthetic:
+
+Example: `"Funko Pop figurine, egg-shaped body, 3:2 head-to-body ratio, plastic sheen, round black dot eyes, no mouth, standing on a round base"`
+
+Save as `STYLE_DESCRIPTOR`. This exact string must be prepended to EVERY character sheet prompt and EVERY subsequent image prompt.
+
+**Step 2 — Generate character sheets:**
+
+For each character, prepend `STYLE_DESCRIPTOR` to the description and add: `"Must match the visual style of {other_character_name}"` (if multiple characters).
+
 ```bash
 GEMINI_API_KEY="$GEMINI_API_KEY" node __PLUGIN_DIR__/scripts/generate-character-sheet.mjs \
-  --name "{NAME}" --description "{DESC}" --style "{STYLE}" --type both \
+  --name "{NAME}" --description "{STYLE_DESCRIPTOR}. {DESC}. Must match the visual style of {OTHER_CHAR}." \
+  --style "{STYLE}" --type both \
   --output "{OUTPUT_DIR}/characters/{name}" --aspect "{ASPECT}"
 ```
 
 Generates: poses sheet, expressions sheet, recreation prompt. Wait 35s between sheets. Review with user. Use pose sheet as `--reference` in all subsequent image prompts.
+
+Save `STYLE_DESCRIPTOR` to `$OUTPUT_DIR/style-descriptor.txt` for use in later phases.
 
 ### Phase 2.1 — Drive Sync & Review (Gate G3)
 
@@ -782,9 +996,44 @@ python3 __PLUGIN_DIR__/scripts/validate-final.py \
 
 If `ship_ready = yes` and average score >= 8: proceed. Otherwise: present scores, wait for human decision.
 
+**Step 5b2 — Generate subtitles (if `SUBTITLES_ENABLED`):**
+```bash
+python3 __PLUGIN_DIR__/scripts/generate-subtitle-video.py \
+  --video "{OUTPUT_DIR}/final.mp4" \
+  --timeline "{OUTPUT_DIR}/audio/timeline.json" \
+  --output "{OUTPUT_DIR}/final-subtitled.mp4" \
+  --srt-output "{OUTPUT_DIR}/subtitles.srt" \
+  --aspect "{ASPECT}" \
+  --style karaoke
+```
+
+This generates:
+- `final-subtitled.mp4` — video with karaoke-style word-by-word highlighting
+- `subtitles.srt` — standalone SRT file for external use (YouTube, etc.)
+
+Subtitle positioning: bottom-center for 9:16, lower-third for 16:9. Font size, color, and highlight color are configurable via `--font-size`, `--font-color`, `--highlight-color`.
+
+**Step 5b3 — Render annotations (if `ANNOTATIONS_ENABLED`):**
+
+The compositor handles annotation overlays if `annotations` data is present in `timeline.json`. Each annotation is rendered as a text overlay at the specified position/time with the chosen style (pill, arrow, or label). If the final video was rendered without annotations, re-composite with `--annotations` flag:
+
+```bash
+python3 $COMPOSITOR \
+  --clips-dir "{OUTPUT_DIR}/clips" \
+  --timeline "{OUTPUT_DIR}/audio/timeline.json" \
+  --vo-audio "{OUTPUT_DIR}/audio/full-vo.mp3" \
+  --output "{OUTPUT_DIR}/final.mp4" \
+  --veo-tcs-dir "{OUTPUT_DIR}/clips-transition" \
+  --sfx-volume 0.35 \
+  --ambient "{AMBIENT_PATH}" --ambient-volume 0.15 \
+  --annotations
+```
+
 **Step 5c — Generate metadata.json** with all generation settings for reproducibility.
 
-**Step 5d — Launch Timeline Editor:**
+**Step 5d — Launch Timeline Editor (AUTOMATIC):**
+
+**This step is mandatory** — always launch the editor after a successful composite + validation. Do not skip or wait for the user to request it.
 
 The editor lets the operator trim clips, adjust VO timing, add transitions, preview the video, and export to professional NLEs (Premiere Pro, DaVinci Resolve, After Effects).
 
@@ -896,13 +1145,12 @@ node __PLUGIN_DIR__/editor/start.mjs \
 
 | Export | Button | Output | Compatible With |
 |--------|--------|--------|-----------------|
-| Premiere XML | "Export Premiere XML" | `export/project.xml` | Premiere Pro, DaVinci Resolve, Final Cut Pro |
-| After Effects | "Export AE Script" | `export/project.jsx` | After Effects (File → Scripts → Run Script) |
+| DaVinci XML | "DaVinci XML" | `export/project.xml` | DaVinci Resolve, Final Cut Pro |
+| Premiere EDL | "Premiere EDL" | `export/project.edl` | Premiere Pro, DaVinci Resolve |
+| After Effects | "AE Script" | `export/project.jsx` | After Effects (File → Scripts → Run Script) |
 | Re-render MP4 | "Render MP4" | `final-edited.mp4` | Standalone playback |
 
-The XML export uses FCP7 XML format — the universal interchange format supported by all major NLEs. It preserves clip positions, trim points, transitions (as cross dissolves), and VO track placement with absolute file paths.
-
-The AE script creates a composition with all clips and VO segments at their correct timeline positions, including opacity keyframes for cross-dissolve transitions.
+The XML export uses FCP7 XML format with individual VO slice files (not in/out ranges on full-vo.mp3) for DaVinci Resolve compatibility. The EDL uses CMX 3600 format — the most universal NLE interchange format. The AE script creates a composition with all clips and VO segments at their correct timeline positions, including opacity keyframes for cross-dissolve transitions.
 
 **Print-ready images:**
 ```bash

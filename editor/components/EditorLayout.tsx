@@ -216,6 +216,11 @@ export default function EditorLayout({ project }: EditorLayoutProps) {
     await postJSON('/api/export-ae', { projectDir: project.projectDir });
   }, [handleSave, project.projectDir]);
 
+  const handleExportEDL = useCallback(async (): Promise<void> => {
+    await handleSave();
+    await postJSON('/api/export-edl', { projectDir: project.projectDir });
+  }, [handleSave, project.projectDir]);
+
   // ── Derived display values ─────────────────────────────────────────────────
   const topic = project.metadata.project.topic;
   const classLevel = project.metadata.project.class;
@@ -393,6 +398,7 @@ export default function EditorLayout({ project }: EditorLayoutProps) {
         onRender={handleRender}
         onExportXML={handleExportXML}
         onExportAE={handleExportAE}
+        onExportEDL={handleExportEDL}
       />
     </div>
   );

@@ -31,16 +31,28 @@ def parse_args():
     p.add_argument("--sfx-volume", type=float, default=0.35, help="Veo SFX volume (default 0.35)")
     p.add_argument("--ambient", default=None, help="Path to ambient loop MP3 file")
     p.add_argument("--ambient-volume", type=float, default=0.15, help="Ambient loop volume (default 0.15)")
+    p.add_argument("--clip-prefix", default="", help="Clip filename prefix for multi-part videos (e.g. 'p1' → clip-p1-01.mp4)")
+    p.add_argument("--annotations", action="store_true", help="Render annotation overlays from timeline data")
     return p.parse_args()
 
 
-def get_clip_path(clips_dir, clip_num):
+def get_clip_path(clips_dir, clip_num, prefix=""):
+    """Find clip file. Tries prefixed name first (e.g. clip-p1-01.mp4), falls back to clip-01.mp4."""
+    if prefix:
+        prefixed = os.path.join(clips_dir, f"clip-{prefix}-{clip_num:02d}.mp4")
+        if os.path.exists(prefixed):
+            return prefixed
     return os.path.join(clips_dir, f"clip-{clip_num:02d}.mp4")
 
 
-def get_tc_path(tcs_dir, tc_num):
+def get_tc_path(tcs_dir, tc_num, prefix=""):
+    """Find transition clip. Tries prefixed name first, falls back to unprefixed."""
     if tcs_dir is None:
         return None
+    if prefix:
+        prefixed = os.path.join(tcs_dir, f"tc-{prefix}-{tc_num:02d}.mp4")
+        if os.path.exists(prefixed):
+            return prefixed
     path = os.path.join(tcs_dir, f"tc-{tc_num:02d}.mp4")
     return path if os.path.exists(path) else None
 
@@ -70,8 +82,10 @@ def main():
 
     print(f"Timeline: {len(clips_data)} clips, total VO duration: {total_duration:.3f}s")
 
+    prefix = args.clip_prefix
+
     # Detect video size from first clip
-    probe_clip = VideoFileClip(get_clip_path(args.clips_dir, clips_data[0]["clip"]))
+    probe_clip = VideoFileClip(get_clip_path(args.clips_dir, clips_data[0]["clip"], prefix))
     video_size = probe_clip.size  # (width, height)
     print(f"Video size: {video_size[0]}x{video_size[1]}")
     probe_clip.close()
@@ -89,7 +103,7 @@ def main():
         audio_end = cd["audio_end"]
         vo_segment_dur = audio_end - audio_start
 
-        clip_path = get_clip_path(args.clips_dir, clip_num)
+        clip_path = get_clip_path(args.clips_dir, clip_num, prefix)
         if not os.path.exists(clip_path):
             print(f"WARNING: {clip_path} not found, skipping")
             continue
@@ -148,7 +162,7 @@ def main():
 
         # Insert transition clip if available
         if i + 1 < len(clips_data) and args.veo_tcs_dir:
-            tc_path = get_tc_path(args.veo_tcs_dir, clip_num)
+            tc_path = get_tc_path(args.veo_tcs_dir, clip_num, prefix)
             if tc_path:
                 tc = VideoFileClip(tc_path).without_audio()
                 # Place TC in the gap between this clip's video end and next clip start

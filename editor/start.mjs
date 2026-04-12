@@ -34,7 +34,7 @@ const port = 3333;
 const mediaPort = 3334;
 
 // ── Media file server (lightweight, supports range requests for video) ──────
-const MIME = { '.mp4': 'video/mp4', '.mp3': 'audio/mpeg', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' };
+const MIME = { '.mp4': 'video/mp4', '.mp3': 'audio/mpeg', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.xml': 'application/xml', '.edl': 'text/plain', '.jsx': 'text/plain', '.json': 'application/json', '.srt': 'text/plain' };
 
 const mediaServer = createServer((req, res) => {
   // CORS headers for Next.js app

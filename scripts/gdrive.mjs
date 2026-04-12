@@ -170,8 +170,11 @@ export async function downloadFile(fileId, outputPath) {
 
 // ── CLI mode ──
 
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const isMain = process.argv[1] === __filename;
 const command = process.argv[2];
-if (command && !process.argv[1].endsWith('.test.mjs')) {
+if (isMain && command) {
   const get = (flag, def = null) => { const i = process.argv.indexOf(flag); return i !== -1 ? process.argv[i + 1] : def; };
 
   try {

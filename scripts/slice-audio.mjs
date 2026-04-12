@@ -32,9 +32,10 @@ const get  = (flag, def = null) => { const i = args.indexOf(flag); return i !== 
 const timelinePath = get('--timeline');
 const audioPath    = get('--audio');
 const outputDir    = get('--output-dir', './audio');
+const clipPrefix   = get('--prefix', '');
 
 if (!timelinePath || !audioPath) {
-  console.error('Usage: node slice-audio.mjs --timeline ./audio/timeline.json --audio ./audio/full-vo.mp3 --output-dir ./audio');
+  console.error('Usage: node slice-audio.mjs --timeline ./audio/timeline.json --audio ./audio/full-vo.mp3 --output-dir ./audio [--prefix p1]');
   process.exit(1);
 }
 
@@ -48,7 +49,8 @@ let allOk = true;
 
 for (const clip of timeline.clips) {
   const nn      = String(clip.clip).padStart(2, '0');
-  const outPath = resolve(join(outputDir, `slice-${nn}.mp3`));
+  const sliceName = clipPrefix ? `slice-${clipPrefix}-${nn}.mp3` : `slice-${nn}.mp3`;
+  const outPath = resolve(join(outputDir, sliceName));
 
   // -c copy keeps exact bytes from the mp3 stream (fast, no re-encode)
   const cmd = `ffmpeg -y -i "${resolve(audioPath)}" -ss ${clip.audio_start.toFixed(3)} -to ${clip.audio_end.toFixed(3)} -c copy "${outPath}"`;

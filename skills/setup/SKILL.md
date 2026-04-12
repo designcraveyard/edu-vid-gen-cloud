@@ -29,6 +29,9 @@ This wizard will help you:
   4. Set up Google Workspace (Drive, Docs, Sheets) for cloud-native storage
   5. Verify everything works
 
+If you have the Claude browser extension, I can see your screen and
+help you through the Google Cloud Console setup step by step.
+
 Let's start by understanding what accounts you already have.
 ```
 
@@ -61,41 +64,133 @@ Google Cloud is the **primary authentication method** for this plugin. It powers
 - Image generation (Imagen 4 / Nano Banana 2 via Vertex AI)
 - All validation scripts (clip, sync, final review)
 
-Guide the user through these steps:
+**Full step-by-step guide:** Load `references/google-cloud-setup-guide.md` — it covers account creation, billing, project setup, all 4 APIs, consent screen, OAuth credentials, and gcloud CLI installation with screenshots-level detail and troubleshooting. If the user has the Claude browser extension, tell them that Claude can see their screen and help at each step.
 
-```
-=== Google Cloud Platform Setup ===
+Guide the user through these steps ONE AT A TIME using **AskUserQuestion** for each:
 
-1. Go to https://console.cloud.google.com/
-2. Click "Get started for free" or sign in with your Google account
-3. If new: accept terms, choose your country, and add billing info
-   (GCP offers $300 free credit for new accounts — more than enough to get started)
+**Step 2.1a** — Use **AskUserQuestion**:
 
-4. Create a project:
-   - Click the project selector at the top of the page
-   - Click "NEW PROJECT"
-   - Name it something like "edu-video-gen"
-   - Click "CREATE"
-
-5. Enable the Vertex AI API:
-   - Go to https://console.cloud.google.com/apis/library
-   - Search for "Vertex AI API"
-   - Click on it and press "ENABLE"
-   - Wait for it to finish enabling
-
-6. Note your Project ID (visible in the project selector dropdown) — you'll need it shortly.
-```
-
-Use **AskUserQuestion**:
-
-> Have you completed the Google Cloud setup above?
+> **Google Cloud Platform Setup (1/4)**
+>
+> Go to https://console.cloud.google.com/ and sign in with the Google account you want to use for this project.
+>
+> If you're new: accept terms, choose your country, and add billing info. GCP offers $300 free credit — more than enough to get started.
+>
+> **Are you signed in?**
 
 | Option | Description |
 |--------|-------------|
-| Yes, done | I've created a GCP project and enabled Vertex AI API. |
-| Skip for now | I'll set up Google Cloud later. I'll use a Gemini API key as fallback instead. |
+| Yes, I'm signed in | I can see the Google Cloud Console. |
+| I need help | I'm having trouble signing in. |
+| Skip Google Cloud | I'll use a Gemini API key as fallback instead. |
 
-If they skip GCP, note that they MUST provide a Gemini API key in Step 3 and warn that validation scripts and Vertex-based image generation won't work without GCP.
+**Step 2.1b** — Use **AskUserQuestion**:
+
+> **Google Cloud Platform Setup (2/4)**
+>
+> Now create a project:
+> 1. Click the project selector at the top of the page (it may say "Select a project" or show an existing project name)
+> 2. Click **"NEW PROJECT"** in the popup
+> 3. Name it: **edu-video-gen** (or any name you like)
+> 4. Click **"CREATE"**
+> 5. **Important:** After creating, click the project selector again and make sure your new project is selected (it should show in bold)
+>
+> **What is your Project ID?** (visible under the project name in the selector — looks like `edu-video-gen` or `edu-video-gen-12345`)
+
+| Option | Description |
+|--------|-------------|
+| I'll type my project ID | (user types it) |
+| I already have a project | I'll use an existing project instead. |
+
+**Step 2.1c** — Use **AskUserQuestion**:
+
+> **Google Cloud Platform Setup (3/4)**
+>
+> Enable the Vertex AI API. Click this link (it opens directly to the right page):
+>
+> https://console.cloud.google.com/apis/library/aiplatform.googleapis.com?project={PROJECT_ID}
+>
+> Click the blue **"ENABLE"** button and wait for it to finish.
+>
+> **Did it enable successfully?**
+
+| Option | Description |
+|--------|-------------|
+| Yes, enabled | I see "API enabled" or "Manage" button. |
+| Error | I'm getting an error message. |
+
+**Step 2.1d** — Use **AskUserQuestion**:
+
+> **Google Cloud Platform Setup (4/6) — IAM Permissions**
+>
+> You need the right permissions to use Vertex AI. Open:
+> https://console.cloud.google.com/iam-admin/iam?project={PROJECT_ID}
+>
+> 1. Find your email in the members list
+> 2. If you see **"Owner"** next to your email — you're good, skip ahead
+> 3. If you do NOT see your email, or it doesn't have Owner/Editor:
+>    - Click **"GRANT ACCESS"**
+>    - Type your email in "New principals"
+>    - Add role: **"Vertex AI User"**
+>    - Click "+ ADD ANOTHER ROLE", add: **"Service Usage Consumer"**
+>    - Click **"SAVE"**
+>
+> **Do you see your email with Owner or the roles above?**
+
+| Option | Description |
+|--------|-------------|
+| Yes, I have Owner | My email shows Owner — no changes needed. |
+| I added the roles | I granted Vertex AI User and Service Usage Consumer. |
+| I need help | I can't find the IAM page or my email isn't listed. |
+
+**Step 2.1e** — Use **AskUserQuestion**:
+
+> **Google Cloud Platform Setup (5/6) — Service Account**
+>
+> Vertex AI needs a service account in your project. Open:
+> https://console.cloud.google.com/iam-admin/serviceaccounts?project={PROJECT_ID}
+>
+> **Do you see any service accounts listed?** (e.g. "Compute Engine default service account" or anything ending in `@developer.gserviceaccount.com`)
+
+| Option | Description |
+|--------|-------------|
+| Yes, there's at least one | A service account already exists. |
+| No, the list is empty | I need to create one. |
+
+If the list is empty, guide them:
+
+> Create a service account:
+> 1. Click **"+ CREATE SERVICE ACCOUNT"**
+> 2. Name: `edu-video-gen`
+> 3. Click **"CREATE AND CONTINUE"**
+> 4. Add role: **"Vertex AI User"**
+> 5. Click **"+ ADD ANOTHER ROLE"**, add: **"Storage Object Viewer"**
+> 6. Click **"CONTINUE"** → **"DONE"**
+>
+> You do NOT need to download a key file.
+
+**Step 2.1f** — Use **AskUserQuestion**:
+
+> **Google Cloud Platform Setup (6/6) — OAuth Consent Screen**
+>
+> Set up the consent screen (needed for Google Drive later):
+>
+> 1. Go to: https://console.cloud.google.com/apis/credentials/consent?project={PROJECT_ID}
+> 2. Choose **"External"** user type → click **Create**
+> 3. Fill in:
+>    - App name: **EduVidGen**
+>    - User support email: your email
+>    - Developer contact: your email
+> 4. Click **"Save and Continue"** through all remaining steps (no need to add anything else)
+>
+> **Done?**
+
+| Option | Description |
+|--------|-------------|
+| Yes, consent screen configured | I completed all steps. |
+| I already had one | It was set up from before. |
+
+If they skip GCP at any point, note that they MUST provide a Gemini API key in Step 3 and warn that validation scripts and Vertex-based image generation won't work without GCP.
 
 ### 2.2 — ElevenLabs (required)
 
@@ -283,39 +378,132 @@ Store this choice as `AUTH_STRATEGY` (vertex / gemini / both).
 
 If AUTH_STRATEGY is `vertex` or `both`:
 
-Use **AskUserQuestion** to collect the project ID:
+**Step 4.2a — Check current gcloud account:**
+
+```bash
+{GCLOUD_PATH} auth list 2>/dev/null
+{GCLOUD_PATH} config get-value account 2>/dev/null
+{GCLOUD_PATH} config get-value project 2>/dev/null
+```
+
+**Step 4.2b — Show current state and ask about account:**
+
+If gcloud already has an active account, show it clearly and ask:
+
+Use **AskUserQuestion**:
+
+> You're currently logged into Google Cloud as: **{current_email}** (project: **{current_project}**)
+>
+> Is this the account you want to use for Edu Video Gen?
+
+| Option | Description |
+|--------|-------------|
+| Yes, use this account | Keep using {current_email}. |
+| No, switch account | I need to log in with a different Google account. |
+| I'm not logged in yet | I need to log in for the first time. |
+
+**If user says "switch account" or "not logged in":**
+
+Show this guide (the user can follow it while the setup continues):
+
+```
+=== Switching Google Cloud Account ===
+
+Don't worry — this is quick and won't affect your other Google tools.
+
+Step 1: Log out of the current account:
+   Run this in your terminal (I'll do it for you):
+   gcloud auth revoke {current_email}
+
+Step 2: Log in with your new account:
+   A browser window will open — pick the Google account
+   that has your Edu Video Gen project.
+
+Step 3: Set up Application Default Credentials:
+   Another browser window will open — pick the same account again.
+   This is what the video generation scripts use behind the scenes.
+```
+
+Then run:
+```bash
+# Revoke old account if switching
+{GCLOUD_PATH} auth revoke {CURRENT_EMAIL} 2>/dev/null || true
+
+# Login — opens browser with account chooser
+{GCLOUD_PATH} auth login --brief
+
+# Set up ADC — opens browser again (same account)
+{GCLOUD_PATH} auth application-default login
+```
+
+After login, confirm the new account:
+```bash
+{GCLOUD_PATH} auth list 2>/dev/null
+```
+
+Show the logged-in email to the user for confirmation.
+
+**Step 4.2c — Collect the project ID:**
+
+Use **AskUserQuestion**:
 
 > What is your Google Cloud project ID?
+>
+> **How to find it:** Look at the top of https://console.cloud.google.com/ — it's in the project selector dropdown. It looks like `my-project-123` or `edu-video-gen` (NOT the project number which is all digits).
 
 | Option | Description |
 |--------|-------------|
 | I know my project ID | I'll type it in. |
-| Help me find it | Show me how to find my project ID. |
+| Help me find it | Run `gcloud projects list` to show my projects. |
 
-If they need help:
-```
-Your project ID is visible at:
-  - https://console.cloud.google.com/ (in the project selector at the top)
-  - Or run: gcloud config get-value project (if gcloud is already configured)
-
-The project ID looks like: my-project-123 or edu-video-gen
-It's NOT the project number (which is all digits).
+If they need help, run:
+```bash
+{GCLOUD_PATH} projects list --format="table(projectId, name, projectNumber)"
 ```
 
-After getting the project ID, run gcloud configuration:
+**Step 4.2d — Set project, enable APIs, and verify IAM:**
 
 ```bash
-# Login to Google Cloud
-{GCLOUD_PATH} auth login
-
-# Set up Application Default Credentials (this is what the scripts use)
-{GCLOUD_PATH} auth application-default login
-
 # Set the project
 {GCLOUD_PATH} config set project {GCLOUD_PROJECT}
 
 # Enable Vertex AI API (in case user didn't do it in Step 2)
 {GCLOUD_PATH} services enable aiplatform.googleapis.com
+
+# Verify the current user has Vertex AI access
+{GCLOUD_PATH} projects get-iam-policy {GCLOUD_PROJECT} \
+  --flatten="bindings[].members" \
+  --filter="bindings.members:$(gcloud config get-value account 2>/dev/null)" \
+  --format="table(bindings.role)" 2>/dev/null
+```
+
+Check the output for `roles/owner`, `roles/editor`, or `roles/aiplatform.user`. If none are present, add the required role:
+
+```bash
+ACCOUNT=$({GCLOUD_PATH} config get-value account 2>/dev/null)
+{GCLOUD_PATH} projects add-iam-policy-binding {GCLOUD_PROJECT} \
+  --member="user:$ACCOUNT" \
+  --role="roles/aiplatform.user" \
+  --quiet
+```
+
+Verify a service account exists (Vertex AI requires one):
+
+```bash
+{GCLOUD_PATH} iam service-accounts list --project={GCLOUD_PROJECT} --format="table(email, displayName)" 2>/dev/null
+```
+
+If no service accounts are listed, create one:
+
+```bash
+{GCLOUD_PATH} iam service-accounts create edu-video-gen \
+  --display-name="Edu Video Gen" \
+  --project={GCLOUD_PROJECT}
+
+{GCLOUD_PATH} projects add-iam-policy-binding {GCLOUD_PROJECT} \
+  --member="serviceAccount:edu-video-gen@{GCLOUD_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/aiplatform.user" \
+  --quiet
 ```
 
 ### 4.3 — Collect API keys
@@ -399,6 +587,8 @@ EOF
 
 ## Step 5 — Google Workspace Setup (Drive, Docs, Sheets)
 
+**IMPORTANT:** The Google Workspace OAuth account must match the Google Cloud account from Step 4.2. If they're different, Drive folders won't be accessible from the same project.
+
 ### 5.1 — Check for credentials.json
 
 Run:
@@ -408,46 +598,125 @@ ls "__PLUGIN_DIR__/credentials.json" 2>/dev/null
 
 If file exists, skip to 5.2.
 
-If file does not exist, guide the user:
+If file does not exist, show this step-by-step guide. Use **AskUserQuestion** after EACH major step so the user isn't overwhelmed:
 
-> Google Workspace setup is needed for cloud-native artifact storage.
->
-> You need to create an OAuth Client ID in your Google Cloud project.
-> Since you already have a Google Cloud project (from Veo setup), this is quick:
->
-> 1. Go to: https://console.cloud.google.com/apis/library
-> 2. Enable these 3 APIs (click each, then Enable):
->    - Google Drive API
->    - Google Docs API
->    - Google Sheets API
->
-> 3. Go to: https://console.cloud.google.com/apis/credentials
-> 4. Click "Create Credentials" then "OAuth Client ID"
-> 5. Application type: "Desktop App"
-> 6. Name: "EduVidGen" (or anything)
-> 7. Click "Create" then "Download JSON"
-> 8. Save the downloaded file as: __PLUGIN_DIR__/credentials.json
+**Step 5.1a** — Use **AskUserQuestion**:
 
-Use **AskUserQuestion** to confirm they've saved the file, then verify it exists.
+> **Google Workspace Setup (Drive, Docs, Sheets)**
+>
+> This lets the plugin store all video artifacts in Google Drive and use Google Sheets for tracking.
+>
+> First, make sure you're in the right Google Cloud project. Open this link:
+> https://console.cloud.google.com/apis/library?project={GCLOUD_PROJECT}
+>
+> **Do you see your project name "{GCLOUD_PROJECT}" at the top of the page?**
 
-### 5.2 — Check for token.json
+| Option | Description |
+|--------|-------------|
+| Yes, I see it | Great, the right project is selected. |
+| No, wrong project | I see a different project name. |
+| I'm not sure | Help me check. |
+
+If wrong project: Tell them to click the project selector at the top and switch to the correct project. Provide the direct link: `https://console.cloud.google.com/apis/library?project={GCLOUD_PROJECT}`
+
+**Step 5.1b** — Use **AskUserQuestion**:
+
+> Now enable 3 APIs. Click each link below and press the blue "Enable" button:
+>
+> 1. **Google Drive API** — https://console.cloud.google.com/apis/library/drive.googleapis.com?project={GCLOUD_PROJECT}
+> 2. **Google Docs API** — https://console.cloud.google.com/apis/library/docs.googleapis.com?project={GCLOUD_PROJECT}
+> 3. **Google Sheets API** — https://console.cloud.google.com/apis/library/sheets.googleapis.com?project={GCLOUD_PROJECT}
+>
+> **Have you enabled all 3 APIs?**
+
+| Option | Description |
+|--------|-------------|
+| Yes, all 3 enabled | I clicked Enable on each one. |
+| Having trouble | I'm getting an error or can't find the button. |
+
+**Step 5.1c** — Use **AskUserQuestion**:
+
+> Now create an OAuth credential. This is a one-time download:
+>
+> 1. Open: https://console.cloud.google.com/apis/credentials?project={GCLOUD_PROJECT}
+> 2. Click **"+ CREATE CREDENTIALS"** at the top
+> 3. Select **"OAuth client ID"**
+> 4. If asked to "Configure consent screen" first:
+>    - Click "Configure consent screen"
+>    - Choose **"External"** user type → click Create
+>    - Fill in: App name = "EduVidGen", User support email = your email, Developer contact = your email
+>    - Click "Save and Continue" through all steps (no need to add scopes or test users)
+>    - Click "Back to Dashboard"
+>    - Then go back to step 2 above
+> 5. Application type: **"Desktop app"**
+> 6. Name: **"EduVidGen"** (or anything you like)
+> 7. Click **"Create"**
+> 8. Click **"Download JSON"** on the popup
+> 9. Move/rename the downloaded file to: `__PLUGIN_DIR__/credentials.json`
+>
+> **Have you downloaded and saved credentials.json?**
+
+| Option | Description |
+|--------|-------------|
+| Yes, saved it | The file is in place. |
+| Having trouble | I'm stuck on one of the steps. |
+
+Verify the file exists:
+```bash
+ls "__PLUGIN_DIR__/credentials.json" 2>/dev/null
+```
+
+### 5.2 — Check for token.json and account match
 
 Run:
 ```bash
 ls "__PLUGIN_DIR__/token.json" 2>/dev/null
 ```
 
-If file exists, skip to 5.3.
+**If token.json exists**, check which account it's for:
+```bash
+set -a; source "__PLUGIN_DIR__/.env" 2>/dev/null; set +a
+cd "__PLUGIN_DIR__" && node scripts/google-auth.mjs 2>&1
+```
 
-If not, run the auth flow:
+Parse the output for `CURRENT_ACCOUNT=`. If the account doesn't match the gcloud account from Step 4.2, use **AskUserQuestion**:
 
+> Your Google Workspace is currently connected as **{workspace_email}**, but your Google Cloud project uses **{gcloud_email}**.
+>
+> For everything to work together, both should use the same account.
+
+| Option | Description |
+|--------|-------------|
+| Switch to {gcloud_email} | Re-authenticate Google Workspace with the correct account. |
+| Keep {workspace_email} | I want to use different accounts (I know what I'm doing). |
+
+If switching, run:
+```bash
+set -a; source "__PLUGIN_DIR__/.env" 2>/dev/null; set +a
+cd "__PLUGIN_DIR__" && node scripts/google-auth.mjs --force
+```
+
+**If token.json does NOT exist**, run the auth flow:
+
+Use **AskUserQuestion** first:
+
+> A browser window is about to open for Google sign-in.
+>
+> **Please sign in with the same Google account you used for Google Cloud: {gcloud_email}**
+>
+> If you see an "This app isn't verified" warning, that's normal — click "Advanced" then "Go to EduVidGen (unsafe)". This is safe because it's your own project.
+>
+> Ready?
+
+| Option | Description |
+|--------|-------------|
+| Yes, open the browser | I'll sign in with {gcloud_email}. |
+
+Then run:
 ```bash
 set -a; source "__PLUGIN_DIR__/.env" 2>/dev/null; set +a
 cd "__PLUGIN_DIR__" && node scripts/google-auth.mjs
 ```
-
-**Note:** If user sees "This app isn't verified" warning, tell them:
-> This is normal for personal/internal Google Cloud projects. Click "Advanced" then "Go to EduVidGen (unsafe)". This is safe — it's your own project.
 
 ### 5.3 — Verify Google Workspace connection
 
@@ -507,7 +776,22 @@ print('ok')
 " 2>/dev/null | grep -q "ok"; then
     echo "✅ Vertex AI connected (project: $GCLOUD_PROJECT)"
   else
-    echo "❌ Vertex AI connection failed — check project ID and ADC"
+    echo "❌ Vertex AI connection failed — check project ID, ADC, and IAM roles (need Vertex AI User)"
+  fi
+  # Check service account exists
+  SA_COUNT=$(gcloud iam service-accounts list --project="$GCLOUD_PROJECT" --format="value(email)" 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$SA_COUNT" -gt "0" ]; then
+    echo "✅ Service account exists ($SA_COUNT found)"
+  else
+    echo "❌ No service account found — Vertex AI may fail. Run /setup to create one"
+  fi
+  # Check IAM roles
+  ACCOUNT=$(gcloud config get-value account 2>/dev/null)
+  ROLES=$(gcloud projects get-iam-policy "$GCLOUD_PROJECT" --flatten="bindings[].members" --filter="bindings.members:$ACCOUNT" --format="value(bindings.role)" 2>/dev/null | tr '\n' ', ')
+  if echo "$ROLES" | grep -qE "owner|editor|aiplatform.user"; then
+    echo "✅ IAM roles OK for $ACCOUNT"
+  else
+    echo "❌ Missing Vertex AI IAM role for $ACCOUNT — run: gcloud projects add-iam-policy-binding $GCLOUD_PROJECT --member=user:$ACCOUNT --role=roles/aiplatform.user"
   fi
 else
   echo "⚠️ GCLOUD_PROJECT not set — Vertex AI features unavailable"

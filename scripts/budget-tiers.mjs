@@ -55,19 +55,23 @@ export function getTierConfig(tier) {
 }
 
 // Cost estimation per API call (approximate, USD)
+// Veo pricing is per-second of generated video (Vertex AI pricing as of 2025)
 const COST_PER_CALL = {
   'gemini-2.0-flash': { image: 0.001 },
-  'veo-3.1-fast': { video: 0.020 },
-  'veo-3.1': { video: 0.035 },
+  'veo-3.1-fast': { perSecond: 0.15 },
+  'veo-3.1': { perSecond: 0.35 },
   'eleven_v3': { perChar: 0.00024 },
   'eleven_flash_v2_5': { perChar: 0.00012 },
   'elevenlabs-sfx': { perGeneration: 0.01 },
   'validation': { perCall: 0.001 },
 };
 
-export function estimateCost(tier, clipCount, avgCharsPerClip = 120) {
+export function estimateCost(tier, clipCount, { avgCharsPerClip = 120, clipDurationSec = 8 } = {}) {
   const config = getTierConfig(tier);
   const usdToInr = parseFloat(process.env.USD_TO_INR || '84.5');
+
+  const videoClipCount = config.transitions === 'generated' ? clipCount * 2 : clipCount;
+  const videoCostPerClip = COST_PER_CALL[config.videoModel].perSecond * clipDurationSec;
 
   const phases = {
     'Character Sheets': { calls: 2, costUsd: 2 * COST_PER_CALL[config.imageModel].image },
@@ -77,8 +81,8 @@ export function estimateCost(tier, clipCount, avgCharsPerClip = 120) {
       costUsd: clipCount * avgCharsPerClip * COST_PER_CALL[config.voiceModel].perChar,
     },
     'Video Clips': {
-      calls: config.transitions === 'generated' ? clipCount * 2 : clipCount,
-      costUsd: (config.transitions === 'generated' ? clipCount * 2 : clipCount) * COST_PER_CALL[config.videoModel].video,
+      calls: videoClipCount,
+      costUsd: videoClipCount * videoCostPerClip,
     },
     'Ambient Audio': {
       calls: config.ambient === 'generated' ? 1 : 0,

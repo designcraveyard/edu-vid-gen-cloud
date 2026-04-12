@@ -1,6 +1,22 @@
 import { create } from 'xmlbuilder2';
 import type { EditedTimeline, VideoClipEdit, VOClipEdit } from '@/lib/types';
 import { resolve } from 'path';
+import { existsSync } from 'fs';
+import { execFileSync } from 'child_process';
+
+function probeAudioDuration(filePath: string): number {
+  try {
+    const out = execFileSync('ffprobe', [
+      '-v', 'quiet',
+      '-show_entries', 'format=duration',
+      '-of', 'csv=p=0',
+      filePath,
+    ], { encoding: 'utf-8' });
+    return parseFloat(out.trim()) || 0;
+  } catch {
+    return 0;
+  }
+}
 
 export function generateFCP7XML(timeline: EditedTimeline): string {
   const fps = timeline.framerate;
@@ -119,14 +135,49 @@ export function generateFCP7XML(timeline: EditedTimeline): string {
     const clipDuration = vo.trimEnd - vo.trimStart;
     const seqStart = toFrames(vo.timelineOffset);
     const seqEnd = toFrames(vo.timelineOffset + clipDuration);
-    const srcIn = toFrames(vo.trimStart);
-    const srcOut = toFrames(vo.trimEnd);
 
-    const voFileName = vo.file.split('/').pop() ?? `vo-${String(vo.clip).padStart(2, '0')}.mp3`;
+    // Check if an individual slice file exists for this clip (supports part-prefixed names)
+    const nn = String(vo.clip).padStart(2, '0');
+    const voSrcName = vo.file.split('/').pop() ?? '';
+    const partMatch = voSrcName.match(/^(?:vo|slice)-(p\d+)-/);
+    const partPrefix = partMatch ? partMatch[1] + '-' : '';
+    let sliceName = `slice-${partPrefix}${nn}.mp3`;
+    let slicePath = resolve(timeline.projectDir, 'audio', sliceName);
+    let useSlice = existsSync(slicePath);
+    // Fallback: try without prefix
+    if (!useSlice && partPrefix) {
+      sliceName = `slice-${nn}.mp3`;
+      slicePath = resolve(timeline.projectDir, 'audio', sliceName);
+      useSlice = existsSync(slicePath);
+    }
+
+    let voFileName: string;
+    let voFileRef: string;
+    let srcIn: number;
+    let srcOut: number;
+    let fileDuration: number;
+
+    if (useSlice) {
+      // Use the individual slice file — full file, no in/out trimming
+      const sliceDur = probeAudioDuration(slicePath);
+      voFileName = sliceName;
+      voFileRef = `audio/${sliceName}`;
+      srcIn = 0;
+      srcOut = toFrames(sliceDur);
+      fileDuration = sliceDur;
+    } else {
+      // Fallback: use the original file reference with in/out points
+      voFileName = vo.file.split('/').pop() ?? `vo-${String(vo.clip).padStart(2, '0')}.mp3`;
+      voFileRef = vo.file;
+      srcIn = toFrames(vo.trimStart);
+      srcOut = toFrames(vo.trimEnd);
+      fileDuration = vo.sourceDuration;
+    }
+
     const clipItem = audioTrack.ele('clipitem', { id: `audio-clip-${vo.clip}` });
     clipItem.ele('name').txt(voFileName).up();
     clipItem.ele('enabled').txt('TRUE').up();
-    clipItem.ele('duration').txt(String(toFrames(vo.sourceDuration))).up();
+    clipItem.ele('duration').txt(String(toFrames(fileDuration))).up();
     clipItem.ele('rate')
       .ele('timebase').txt(String(fps)).up()
       .ele('ntsc').txt('FALSE').up()
@@ -138,8 +189,8 @@ export function generateFCP7XML(timeline: EditedTimeline): string {
 
     const fileEl = clipItem.ele('file', { id: `file-audio-${vo.clip}` });
     fileEl.ele('name').txt(voFileName).up();
-    fileEl.ele('pathurl').txt(fileUrl(vo.file)).up();
-    fileEl.ele('duration').txt(String(toFrames(vo.sourceDuration))).up();
+    fileEl.ele('pathurl').txt(fileUrl(voFileRef)).up();
+    fileEl.ele('duration').txt(String(toFrames(fileDuration))).up();
     fileEl.ele('rate')
       .ele('timebase').txt(String(fps)).up()
       .ele('ntsc').txt('FALSE').up()
