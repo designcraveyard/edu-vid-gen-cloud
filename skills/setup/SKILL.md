@@ -53,22 +53,46 @@ Check each prerequisite:
 ```bash
 echo "=== Prerequisite Check ==="
 
-# Node.js
-command -v node &>/dev/null && echo "✅ Node.js $(node -v)" || echo "❌ Node.js — not found"
+# Detect platform
+OS="$(uname -s 2>/dev/null || echo Windows)"
+echo "Platform: $OS"
 
-# Python 3
-command -v python3 &>/dev/null && echo "✅ Python $(python3 --version 2>&1)" || echo "❌ Python 3 — not found"
+# Node.js (try both `node` and `node.exe` for Windows compatibility)
+if command -v node &>/dev/null || where node &>/dev/null 2>&1; then
+  echo "✅ Node.js $(node -v 2>/dev/null || node --version 2>/dev/null)"
+else
+  echo "❌ Node.js — not found"
+fi
+
+# Python 3 (Windows often uses `python` not `python3`)
+if command -v python3 &>/dev/null; then
+  echo "✅ Python $(python3 --version 2>&1)"
+elif command -v python &>/dev/null && python --version 2>&1 | grep -q "3\."; then
+  echo "✅ Python $(python --version 2>&1) (as 'python')"
+else
+  echo "❌ Python 3 — not found"
+fi
 
 # ffmpeg
-command -v ffmpeg &>/dev/null && echo "✅ ffmpeg installed" || echo "❌ ffmpeg — not found"
+if command -v ffmpeg &>/dev/null || where ffmpeg &>/dev/null 2>&1; then
+  echo "✅ ffmpeg installed"
+else
+  echo "❌ ffmpeg — not found"
+fi
 
 # ImageMagick
-(command -v magick &>/dev/null || command -v convert &>/dev/null) && echo "✅ ImageMagick installed" || echo "❌ ImageMagick — not found"
+if command -v magick &>/dev/null || command -v convert &>/dev/null || where magick &>/dev/null 2>&1; then
+  echo "✅ ImageMagick installed"
+else
+  echo "❌ ImageMagick — not found"
+fi
 
-# Python packages
-python3 -c "import google.genai" 2>/dev/null && echo "✅ google-genai" || echo "❌ google-genai"
-python3 -c "import moviepy" 2>/dev/null && echo "✅ moviepy" || echo "❌ moviepy"
-python3 -c "from PIL import Image" 2>/dev/null && echo "✅ Pillow" || echo "❌ Pillow"
+# Python packages (use whichever python command works)
+PY="python3"
+command -v python3 &>/dev/null || PY="python"
+$PY -c "import google.genai" 2>/dev/null && echo "✅ google-genai" || echo "❌ google-genai"
+$PY -c "import moviepy" 2>/dev/null && echo "✅ moviepy" || echo "❌ moviepy"
+$PY -c "from PIL import Image" 2>/dev/null && echo "✅ Pillow" || echo "❌ Pillow"
 ```
 
 If anything is missing, use **AskUserQuestion**:
@@ -80,21 +104,62 @@ If anything is missing, use **AskUserQuestion**:
 | Yes, install all | Install all missing prerequisites automatically. |
 | Skip | I'll install them myself later. |
 
-For installation:
+**Detect the platform first**, then install only what's missing:
 
 ```bash
-# macOS
+OS="$(uname -s)"
+```
+
+### macOS
+```bash
 brew install ffmpeg imagemagick node python3
+```
 
-# Linux (Debian/Ubuntu)
+### Linux (Debian/Ubuntu)
+```bash
 sudo apt-get update && sudo apt-get install -y ffmpeg imagemagick nodejs python3
+```
 
-# Python packages (all platforms)
+### Windows (Git Bash / PowerShell)
+
+Use `winget` (built into Windows 10+). Run each missing tool individually so one failure doesn't block the rest:
+
+```powershell
+# Node.js
+winget install --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+
+# Python 3
+winget install --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
+
+# ffmpeg
+winget install --id Gyan.FFmpeg --accept-source-agreements --accept-package-agreements
+
+# ImageMagick
+winget install --id ImageMagick.ImageMagick --accept-source-agreements --accept-package-agreements
+```
+
+**Important (Windows):** After `winget install`, the tool may not be on PATH in the current terminal. Tell the user:
+
+> ⚠️ Please **close and reopen your terminal** (or run `refreshenv` if using Chocolatey) after installation, then re-run `/setup` to continue.
+
+If `winget` is not available (older Windows), fall back to direct download links:
+- Node.js: https://nodejs.org (LTS `.msi` installer)
+- Python: https://python.org/downloads (check "Add to PATH" during install)
+- FFmpeg: https://github.com/BtbN/FFmpeg-Builds/releases (add `bin/` to PATH)
+
+### All platforms — Python packages + Node deps
+
+```bash
+# Python packages
 pip3 install google-genai moviepy Pillow requests --break-system-packages
 
 # Node.js packages
 cd "__PLUGIN_DIR__/scripts" && npm install
 ```
+
+### Timeout safeguard
+
+If any single install command takes longer than **3 minutes**, cancel it and tell the user to install that tool manually using the download links above. Do not let the wizard hang indefinitely.
 
 ---
 
