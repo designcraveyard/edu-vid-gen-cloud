@@ -56,175 +56,323 @@ const HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Edu Video Gen — Setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-    background: #0a0a0a; color: #e5e5e5;
-    min-height: 100vh; display: flex; justify-content: center; padding: 40px 20px;
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --success: 142 76% 36%;
+    --radius: 0.5rem;
   }
-  .container { max-width: 640px; width: 100%; }
-  h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; color: #fff; }
-  .subtitle { color: #888; margin-bottom: 32px; font-size: 15px; }
-  .section { margin-bottom: 28px; }
-  .section-title {
-    font-size: 13px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.5px; color: #888; margin-bottom: 12px;
-  }
-  .card {
-    background: #161616; border: 1px solid #262626; border-radius: 12px;
-    padding: 20px; margin-bottom: 12px;
-  }
-  label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; color: #ccc; }
-  .hint { font-size: 12px; color: #666; margin-bottom: 8px; }
-  input[type="text"], input[type="password"] {
-    width: 100%; padding: 10px 12px; background: #0a0a0a; border: 1px solid #333;
-    border-radius: 8px; color: #fff; font-size: 14px; font-family: monospace;
-    outline: none; transition: border-color 0.2s;
-  }
-  input:focus { border-color: #666; }
-  input::placeholder { color: #444; }
 
-  .file-upload {
-    border: 2px dashed #333; border-radius: 8px; padding: 20px;
-    text-align: center; cursor: pointer; transition: all 0.2s;
-    position: relative;
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: hsl(var(--secondary));
+    color: hsl(var(--foreground));
+    min-height: 100vh;
+    display: flex; justify-content: center;
+    padding: 48px 16px;
+    -webkit-font-smoothing: antialiased;
   }
-  .file-upload:hover { border-color: #555; background: #1a1a1a; }
-  .file-upload.has-file { border-color: #22c55e; border-style: solid; }
-  .file-upload input[type="file"] {
+
+  .container { max-width: 580px; width: 100%; }
+
+  /* Header */
+  .header { margin-bottom: 32px; }
+  .header h1 {
+    font-size: 24px; font-weight: 700; letter-spacing: -0.025em;
+    color: hsl(var(--foreground)); margin-bottom: 4px;
+  }
+  .header p {
+    font-size: 14px; color: hsl(var(--muted-foreground)); line-height: 1.5;
+  }
+
+  /* Card */
+  .card {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  }
+  .card-header {
+    margin-bottom: 20px;
+  }
+  .card-title {
+    font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+    color: hsl(var(--foreground)); margin-bottom: 2px;
+  }
+  .card-description {
+    font-size: 13px; color: hsl(var(--muted-foreground)); line-height: 1.5;
+  }
+
+  /* Form */
+  .form-group { margin-bottom: 16px; }
+  .form-group:last-child { margin-bottom: 0; }
+
+  .form-label {
+    display: block; font-size: 13px; font-weight: 500;
+    color: hsl(var(--foreground)); margin-bottom: 6px;
+  }
+  .form-label .badge {
+    display: inline-block; font-size: 11px; font-weight: 500;
+    padding: 1px 6px; border-radius: 9999px; margin-left: 6px;
+    vertical-align: middle;
+  }
+  .badge-required { background: hsl(0 84.2% 60.2% / 0.1); color: hsl(var(--destructive)); }
+  .badge-optional { background: hsl(var(--secondary)); color: hsl(var(--muted-foreground)); }
+
+  .form-hint {
+    font-size: 12px; color: hsl(var(--muted-foreground));
+    margin-bottom: 8px; line-height: 1.4;
+  }
+
+  input[type="text"], input[type="password"] {
+    width: 100%; height: 36px; padding: 0 12px;
+    background: transparent;
+    border: 1px solid hsl(var(--input));
+    border-radius: calc(var(--radius) - 2px);
+    color: hsl(var(--foreground));
+    font-size: 13px; font-family: 'Inter', system-ui, sans-serif;
+    outline: none; transition: all 0.15s;
+  }
+  input:focus {
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.1);
+  }
+  input::placeholder { color: hsl(var(--muted-foreground) / 0.5); }
+  input.mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace; font-size: 12px; }
+
+  /* File upload */
+  .file-zone {
+    border: 1px dashed hsl(var(--border));
+    border-radius: calc(var(--radius) - 2px);
+    padding: 24px 16px;
+    text-align: center; cursor: pointer;
+    transition: all 0.15s; position: relative;
+    background: hsl(var(--secondary) / 0.5);
+  }
+  .file-zone:hover {
+    border-color: hsl(var(--muted-foreground) / 0.3);
+    background: hsl(var(--secondary));
+  }
+  .file-zone.uploaded {
+    border-color: hsl(var(--success));
+    border-style: solid;
+    background: hsl(142 76% 36% / 0.04);
+  }
+  .file-zone input[type="file"] {
     position: absolute; inset: 0; opacity: 0; cursor: pointer;
   }
-  .file-upload .icon { font-size: 24px; margin-bottom: 4px; }
-  .file-upload .text { font-size: 13px; color: #888; }
-  .file-upload.has-file .text { color: #22c55e; }
-
-  .status-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 0; font-size: 14px;
+  .file-zone svg { margin: 0 auto 8px; display: block; }
+  .file-zone .file-label {
+    font-size: 13px; color: hsl(var(--muted-foreground));
   }
-  .status-dot {
-    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-  }
-  .status-dot.green { background: #22c55e; }
-  .status-dot.red { background: #ef4444; }
-  .status-dot.yellow { background: #eab308; }
+  .file-zone.uploaded .file-label { color: hsl(var(--success)); font-weight: 500; }
 
-  .btn {
-    width: 100%; padding: 14px; background: #fff; color: #000;
-    border: none; border-radius: 10px; font-size: 16px; font-weight: 600;
-    cursor: pointer; transition: all 0.2s; margin-top: 8px;
+  /* Status badges */
+  .status-list { display: flex; flex-direction: column; gap: 8px; }
+  .status-item {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: hsl(var(--foreground));
   }
-  .btn:hover { background: #e5e5e5; }
-  .btn:disabled { background: #333; color: #666; cursor: not-allowed; }
-  .btn.secondary {
-    background: transparent; border: 1px solid #333; color: #ccc;
-    font-size: 14px; padding: 10px; margin-top: 4px;
+  .status-icon {
+    width: 18px; height: 18px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 10px;
   }
-  .btn.secondary:hover { border-color: #555; }
+  .status-icon.ok { background: hsl(142 76% 36% / 0.1); color: hsl(var(--success)); }
+  .status-icon.err { background: hsl(0 84.2% 60.2% / 0.1); color: hsl(var(--destructive)); }
+  .status-icon.warn { background: hsl(48 96% 53% / 0.15); color: hsl(48 96% 40%); }
 
-  .success {
-    text-align: center; padding: 60px 20px;
+  /* Buttons */
+  .btn-primary {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 100%; height: 40px;
+    background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+    border: none; border-radius: calc(var(--radius) - 2px);
+    font-size: 14px; font-weight: 500; font-family: inherit;
+    cursor: pointer; transition: opacity 0.15s;
   }
-  .success .checkmark { font-size: 64px; margin-bottom: 16px; }
-  .success h2 { font-size: 24px; color: #fff; margin-bottom: 8px; }
-  .success p { color: #888; margin-bottom: 24px; }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .error-msg { color: #ef4444; font-size: 13px; margin-top: 8px; }
-  .info-msg { color: #888; font-size: 13px; margin-top: 4px; }
+  .btn-outline {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 100%; height: 40px;
+    background: transparent; color: hsl(var(--foreground));
+    border: 1px solid hsl(var(--input));
+    border-radius: calc(var(--radius) - 2px);
+    font-size: 14px; font-weight: 500; font-family: inherit;
+    cursor: pointer; transition: all 0.15s;
+    margin-top: 8px;
+  }
+  .btn-outline:hover { background: hsl(var(--accent)); }
 
-  .row { display: flex; gap: 12px; }
-  .row > * { flex: 1; }
+  .btn-group { margin-top: 4px; }
+
+  /* Separator */
+  .separator {
+    height: 1px; background: hsl(var(--border));
+    margin: 16px 0;
+  }
+
+  /* Messages */
+  .msg { font-size: 13px; margin-top: 8px; line-height: 1.4; }
+  .msg-error { color: hsl(var(--destructive)); }
+  .msg-info { color: hsl(var(--muted-foreground)); }
+  .msg-success { color: hsl(var(--success)); }
+
+  /* Success screen */
+  .success-screen { text-align: center; padding: 80px 20px; }
+  .success-screen .icon {
+    width: 56px; height: 56px; margin: 0 auto 20px;
+    background: hsl(142 76% 36% / 0.1); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+  }
+  .success-screen h2 {
+    font-size: 20px; font-weight: 600; letter-spacing: -0.01em;
+    margin-bottom: 4px;
+  }
+  .success-screen p {
+    font-size: 14px; color: hsl(var(--muted-foreground));
+    margin-bottom: 24px;
+  }
+  .success-screen code {
+    background: hsl(var(--secondary)); padding: 2px 6px;
+    border-radius: 4px; font-size: 13px;
+    font-family: ui-monospace, monospace;
+  }
 </style>
 </head>
 <body>
 <div class="container" id="app">
 
-  <h1>Edu Video Gen</h1>
-  <p class="subtitle">Setup wizard — configure your video generation pipeline</p>
+  <div class="header">
+    <h1>Edu Video Gen</h1>
+    <p>Configure your video generation pipeline. This takes about a minute.</p>
+  </div>
 
   <!-- Status -->
-  <div class="section" id="status-section">
-    <div class="section-title">Current Status</div>
-    <div class="card" id="status-card">
-      <div class="status-row"><div class="status-dot" id="dot-sa"></div><span id="status-sa">Checking...</span></div>
-      <div class="status-row"><div class="status-dot" id="dot-cred"></div><span id="status-cred">Checking...</span></div>
-      <div class="status-row"><div class="status-dot" id="dot-token"></div><span id="status-token">Checking...</span></div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Status</div>
+    </div>
+    <div class="status-list">
+      <div class="status-item"><div class="status-icon" id="dot-sa"></div><span id="status-sa">Checking...</span></div>
+      <div class="status-item"><div class="status-icon" id="dot-cred"></div><span id="status-cred">Checking...</span></div>
+      <div class="status-item"><div class="status-icon" id="dot-token"></div><span id="status-token">Checking...</span></div>
     </div>
   </div>
 
   <!-- Auth Files -->
-  <div class="section">
-    <div class="section-title">Authentication Files</div>
-    <div class="card">
-      <label>Service Account JSON</label>
-      <p class="hint">For Vertex AI (Veo video gen, Imagen images). Ask your admin if you don't have this.</p>
-      <div class="file-upload" id="sa-upload">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Authentication</div>
+      <div class="card-description">Upload the JSON files provided by your admin.</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Service Account <span class="badge badge-required">required</span></label>
+      <p class="form-hint">For video and image generation via Vertex AI.</p>
+      <div class="file-zone" id="sa-upload">
         <input type="file" accept=".json" onchange="handleFile(this, 'service-account')">
-        <div class="icon">📄</div>
-        <div class="text" id="sa-text">Drop service-account.json here or click to browse</div>
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:hsl(var(--muted-foreground))"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12-3-3m0 0-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
+        <div class="file-label" id="sa-text">Click to upload service-account.json</div>
       </div>
     </div>
-    <div class="card">
-      <label>OAuth Credentials JSON</label>
-      <p class="hint">For Google Drive, Docs, Sheets access. Ask your admin if you don't have this.</p>
-      <div class="file-upload" id="cred-upload">
+
+    <div class="separator"></div>
+
+    <div class="form-group">
+      <label class="form-label">OAuth Credentials <span class="badge badge-required">required</span></label>
+      <p class="form-hint">For Google Drive, Docs, and Sheets access.</p>
+      <div class="file-zone" id="cred-upload">
         <input type="file" accept=".json" onchange="handleFile(this, 'credentials')">
-        <div class="icon">📄</div>
-        <div class="text" id="cred-text">Drop credentials.json here or click to browse</div>
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:hsl(var(--muted-foreground))"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12-3-3m0 0-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
+        <div class="file-label" id="cred-text">Click to upload credentials.json</div>
       </div>
     </div>
   </div>
 
   <!-- API Keys -->
-  <div class="section">
-    <div class="section-title">API Keys</div>
-    <div class="card">
-      <label>ElevenLabs API Key <span style="color:#ef4444">*required</span></label>
-      <p class="hint">For voiceover generation. Get one at elevenlabs.io/app/settings/api-keys</p>
-      <input type="password" id="elevenlabs-key" placeholder="sk_..." autocomplete="off">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">API Keys</div>
+      <div class="card-description">Paste your API keys below.</div>
     </div>
-    <div class="card">
-      <label>Gemini API Key <span style="color:#666">optional</span></label>
-      <p class="hint">Fallback for image generation. Get one at aistudio.google.com/apikey</p>
-      <input type="password" id="gemini-key" placeholder="AI..." autocomplete="off">
+
+    <div class="form-group">
+      <label class="form-label">ElevenLabs <span class="badge badge-required">required</span></label>
+      <p class="form-hint">For voiceover generation. Get yours at elevenlabs.io/app/settings/api-keys</p>
+      <input type="password" class="mono" id="elevenlabs-key" placeholder="sk_..." autocomplete="off">
     </div>
-    <div class="card">
-      <label>Together AI Key <span style="color:#666">optional</span></label>
-      <p class="hint">Enables Wan 2.7 video backend (~33% cheaper than Veo)</p>
-      <input type="password" id="together-key" placeholder="" autocomplete="off">
+
+    <div class="form-group">
+      <label class="form-label">Gemini API Key <span class="badge badge-optional">optional</span></label>
+      <p class="form-hint">Fallback for image generation. Get yours at aistudio.google.com/apikey</p>
+      <input type="password" class="mono" id="gemini-key" placeholder="AI..." autocomplete="off">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Together AI <span class="badge badge-optional">optional</span></label>
+      <p class="form-hint">Enables Wan 2.7 video backend, ~33% cheaper than Veo.</p>
+      <input type="password" class="mono" id="together-key" placeholder="" autocomplete="off">
     </div>
   </div>
 
   <!-- Output -->
-  <div class="section">
-    <div class="section-title">Output</div>
-    <div class="card">
-      <label>Video Output Folder</label>
-      <p class="hint">Where generated videos will be saved. You can change this anytime.</p>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Output Folder</div>
+      <div class="card-description">Where your generated videos will be saved. You can change this anytime.</div>
+    </div>
+    <div class="form-group">
       <input type="text" id="output-dir" placeholder="">
     </div>
   </div>
 
   <!-- Actions -->
-  <div class="section">
-    <button class="btn" onclick="saveConfig()">Save & Continue</button>
-    <button class="btn secondary" onclick="startGoogleLogin()">Sign into Google (Drive/Sheets)</button>
-    <p class="info-msg" id="google-login-status"></p>
-    <p class="error-msg" id="error-msg"></p>
+  <div class="btn-group">
+    <button class="btn-primary" onclick="saveConfig()">Save Configuration</button>
+    <button class="btn-outline" onclick="startGoogleLogin()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      Sign into Google
+    </button>
+    <p class="msg msg-info" id="google-login-status"></p>
+    <p class="msg msg-error" id="error-msg"></p>
   </div>
 
 </div>
 
 <!-- Success screen -->
 <div class="container" id="success-screen" style="display:none">
-  <div class="success">
-    <div class="checkmark">✅</div>
-    <h2>Setup Complete!</h2>
-    <p>Your video generation pipeline is ready.</p>
-    <button class="btn" onclick="openClaude()">Open Claude Code</button>
-    <p class="info-msg" style="margin-top:16px">
-      Type <code>/edu-video</code> in Claude Code to generate your first video.
+  <div class="success-screen">
+    <div class="icon">&#10003;</div>
+    <h2>Setup Complete</h2>
+    <p>Your video generation pipeline is ready to go.</p>
+    <button class="btn-primary" onclick="openClaude()" style="max-width:280px;margin:0 auto">Open Claude Code</button>
+    <p class="msg msg-info" style="margin-top:16px">
+      Type <code>/edu-video</code> to generate your first video.
     </p>
   </div>
 </div>
@@ -244,12 +392,12 @@ async function init() {
 
   // Pre-fill
   if (config.hasServiceAccount) {
-    document.getElementById('sa-upload').classList.add('has-file');
-    document.getElementById('sa-text').textContent = 'service-account.json (' + (config.saProject || 'loaded') + ')';
+    document.getElementById('sa-upload').classList.add('uploaded');
+    document.getElementById('sa-text').textContent = config.saEmail || 'Loaded';
   }
   if (config.hasCredentials) {
-    document.getElementById('cred-upload').classList.add('has-file');
-    document.getElementById('cred-text').textContent = 'credentials.json (loaded)';
+    document.getElementById('cred-upload').classList.add('uploaded');
+    document.getElementById('cred-text').textContent = 'credentials.json loaded';
   }
 
   document.getElementById('elevenlabs-key').value = config.ELEVENLABS_API_KEY || '';
@@ -263,7 +411,9 @@ async function init() {
 }
 
 function setStatus(id, ok, text) {
-  document.getElementById('dot-' + id).className = 'status-dot ' + (ok ? 'green' : 'red');
+  const dot = document.getElementById('dot-' + id);
+  dot.className = 'status-icon ' + (ok ? 'ok' : 'err');
+  dot.textContent = ok ? String.fromCharCode(10003) : String.fromCharCode(10007);
   document.getElementById('status-' + id).textContent = text;
 }
 
@@ -279,13 +429,13 @@ function handleFile(input, type) {
 
       const el = document.getElementById(type === 'service-account' ? 'sa-upload' : 'cred-upload');
       const textEl = document.getElementById(type === 'service-account' ? 'sa-text' : 'cred-text');
-      el.classList.add('has-file');
+      el.classList.add('uploaded');
 
       if (type === 'service-account' && json.client_email) {
-        textEl.textContent = json.client_email + ' (' + json.project_id + ')';
+        textEl.textContent = json.client_email;
         setStatus('sa', true, 'Service Account: ' + json.client_email);
       } else if (type === 'credentials') {
-        textEl.textContent = 'credentials.json (loaded)';
+        textEl.textContent = 'credentials.json loaded';
         setStatus('cred', true, 'OAuth credentials loaded');
       }
     } catch (err) {
