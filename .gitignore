@@ -21,4 +21,5 @@ Thumbs.db
 scripts/node_modules/
 credentials.json
 token.json
+service-account.json
 .cache/

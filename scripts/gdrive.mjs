@@ -21,11 +21,27 @@ import { Readable } from 'stream';
 // ── Auth helper ──
 
 export function getAuth() {
-  const credPath  = resolve(process.env.GOOGLE_CREDENTIALS_PATH || './credentials.json');
-  const tokenPath = resolve(process.env.GOOGLE_TOKEN_PATH || './token.json');
+  // OAuth2 flow (credentials.json + token.json) — required for Drive/Docs/Sheets
+  // Service accounts on free Google accounts have zero Drive storage quota,
+  // so OAuth2 is the only option for Drive operations.
+  // For Vertex AI (Veo), use GOOGLE_APPLICATION_CREDENTIALS with service-account.json instead.
+  const credCandidates = [
+    process.env.GOOGLE_CREDENTIALS_PATH,
+    './credentials.json',
+    resolve(import.meta.dirname, '..', 'credentials.json'),
+  ].filter(Boolean).map(p => resolve(p));
 
-  if (!existsSync(credPath)) throw new Error(`credentials.json not found at ${credPath}. Run /setup first.`);
-  if (!existsSync(tokenPath)) throw new Error(`token.json not found at ${tokenPath}. Run: node scripts/google-auth.mjs`);
+  const tokenCandidates = [
+    process.env.GOOGLE_TOKEN_PATH,
+    './token.json',
+    resolve(import.meta.dirname, '..', 'token.json'),
+  ].filter(Boolean).map(p => resolve(p));
+
+  const credPath = credCandidates.find(p => existsSync(p));
+  const tokenPath = tokenCandidates.find(p => existsSync(p));
+
+  if (!credPath) throw new Error(`credentials.json not found. Run /setup first.\nSearched: ${credCandidates.join(', ')}`);
+  if (!tokenPath) throw new Error(`token.json not found. Run: node scripts/google-auth.mjs\nSearched: ${tokenCandidates.join(', ')}`);
 
   const creds = JSON.parse(readFileSync(credPath, 'utf-8'));
   const { client_id, client_secret } = creds.installed || creds.web || {};

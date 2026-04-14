@@ -1,6 +1,6 @@
 ---
 name: edu-vid-gen
-description: Generate an educational explainer video for a given topic and school class. Cloud-native Google Drive-first pipeline with budget tiers (Low/Medium/High), collaborative review gates at every milestone, full observability via Google Sheets tracker, and Google Docs for editable briefs. Audio-first architecture with VO-driven clip planning, Gemini-powered validation, MoviePy compositor, ambient audio layers, and multi-model video backends (Veo, Wan). Use this skill when the user asks to create an educational video, generate a video for a class/topic, or wants to produce animated explainer content.
+description: Generate an educational explainer video for a given topic and school class. Cloud-native Google Drive-first pipeline with budget tiers (Low/Medium/High), collaborative review gates at every milestone, full observability via Google Sheets tracker, and Google Docs for editable briefs. Audio-first architecture with VO-driven clip planning, Gemini-powered validation, MoviePy compositor, ambient audio layers, and multi-model video backends (Veo, Wan). Use this skill when the user asks to create an educational video, generate a video for a class/topic, or wants to produce animated explainer content. Supports per-video output folder override — user can say "save this video in [path]" to change where files are saved for a single run.
 ---
 
 # Edu Video Generator V2
@@ -23,9 +23,9 @@ Scripts live at: `__PLUGIN_DIR__/scripts/`
 | `rebuild-timeline.mjs` | Validate + renumber timeline after edits | none |
 | `slice-audio.mjs` | Slice `full-vo.mp3` at clip boundaries | ffmpeg |
 | `generate-image.mjs` | Keyframe images via Gemini | `GEMINI_API_KEY` |
-| `generate-image-vertex.py` | Keyframe images via Vertex AI | gcloud ADC |
+| `generate-image-vertex.py` | Keyframe images via Vertex AI | service-account.json (via GOOGLE_APPLICATION_CREDENTIALS) |
 | `generate-voiceover.mjs` | Single-segment TTS (legacy/standalone) | `ELEVENLABS_API_KEY` |
-| `generate-video.py` | Video clips via Vertex AI Veo 3.1 | gcloud ADC |
+| `generate-video.py` | Video clips via Vertex AI Veo 3.1 | service-account.json |
 | `generate-character-sheet.mjs` | Character pose/expression reference sheets | `GEMINI_API_KEY` |
 | `generate-subtitle-video.py` | Karaoke subtitle overlay for review | ffmpeg + Pillow |
 | `generate-ambient.mjs` | Generate ambient loop via ElevenLabs Sound Effects API | `ELEVENLABS_API_KEY` |
@@ -35,7 +35,7 @@ Scripts live at: `__PLUGIN_DIR__/scripts/`
 | `checkpoint.py` | Phase gate verification | none |
 | `enhance-for-print.mjs` | Upscale, CMYK, contrast for print | ImageMagick 7 |
 | `extend-image.mjs` | Extend images for text overlay space | `GEMINI_API_KEY` + ImageMagick |
-| `extend-video.py` | Veo video extension chain | gcloud ADC |
+| `extend-video.py` | Veo video extension chain | service-account.json |
 | `generate-zoom.mjs` | Ken Burns zoom clip generation | ffmpeg |
 | `stitch.mjs` | Legacy ffmpeg concatenation | ffmpeg |
 
@@ -119,16 +119,36 @@ Ask the user:
 
 Save variables: `TOPIC`, `CLASS`, `NARRATION_LANG`, `CHAPTER_SOURCE`, `STYLE`, `CHARACTER_MODE`, `DURATION_SEC`, `ASPECT`, `AMBIENT_CATEGORY`, `SUBTITLES_ENABLED`, `ANNOTATIONS_ENABLED`, `BUDGET_TIER`
 
+13. **Output folder** (optional) — If the user specified a custom folder for this video (e.g. "save this video in ~/Desktop/review/"), use that path. Otherwise use the default from `.env`.
+
 Create output folder:
 ```bash
 # Load env for OUTPUT_BASE_DIR (and API keys)
 set -a; source "__PLUGIN_DIR__/.env" 2>/dev/null; set +a
-BASE_DIR="${OUTPUT_BASE_DIR:-$PWD}"
+
+# Output folder priority:
+# 1. User-specified path in conversation (CUSTOM_OUTPUT_DIR if set)
+# 2. OUTPUT_BASE_DIR from .env
+# 3. Platform default: ~/Movies/EduVidGen (Mac) or ~/Videos/EduVidGen (Linux/Windows)
+# 4. Current working directory (last resort)
+if [ -n "${CUSTOM_OUTPUT_DIR:-}" ]; then
+  BASE_DIR="$CUSTOM_OUTPUT_DIR"
+elif [ -n "${OUTPUT_BASE_DIR:-}" ]; then
+  BASE_DIR="$OUTPUT_BASE_DIR"
+elif [ "$(uname)" = "Darwin" ]; then
+  BASE_DIR="$HOME/Movies/EduVidGen"
+else
+  BASE_DIR="$HOME/Videos/EduVidGen"
+fi
+
 SLUG=$(echo "{TOPIC}" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-')
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 OUTPUT_DIR="${BASE_DIR}/${SLUG}-${TIMESTAMP}"
 mkdir -p "$OUTPUT_DIR"/{images,clips,clips-transition,audio,prompts,characters}
+echo "Output folder: $OUTPUT_DIR"
 ```
+
+**IMPORTANT:** Always print the output folder path so the user knows where to find their video. If the user said something like "save in ~/Desktop/client-review/", set `CUSTOM_OUTPUT_DIR` to that path before running the above block.
 
 ### Phase 1.5 — Initialize Google Drive Project
 
