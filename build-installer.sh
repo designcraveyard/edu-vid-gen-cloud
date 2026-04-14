@@ -97,96 +97,74 @@ rm -rf "$STAGE_DIR/$APP_NAME/.git"
 echo "Staged $(find "$STAGE_DIR" -type f | wc -l | tr -d ' ') files"
 
 # ═══════════════════════════════════════
-# Mac .pkg installer
+# Mac .dmg installer
 # ═══════════════════════════════════════
 
 echo ""
-echo "Building Mac .pkg..."
+echo "Building Mac .dmg..."
 
-INSTALL_LOCATION="/Applications/$APP_NAME"
-PKG_ID="com.eduvid.$SLUG"
-PKG_PATH="$DIST_DIR/${APP_NAME}-${SLUG}-${DATE}.pkg"
-COMPONENT_PKG="$DIST_DIR/component-${SLUG}.pkg"
+DMG_PATH="$DIST_DIR/${APP_NAME}-${SLUG}-${DATE}.dmg"
+DMG_STAGE="$DIST_DIR/dmg-stage-${SLUG}"
 
-# Create post-install script
-mkdir -p "$STAGE_DIR/scripts-pkg"
-cat > "$STAGE_DIR/scripts-pkg/postinstall" << 'POSTINSTALL'
-#!/bin/bash
-INSTALL_DIR="/Applications/EduVidGen"
+rm -rf "$DMG_STAGE"
+mkdir -p "$DMG_STAGE"
+
+# Copy the app folder
+cp -r "$STAGE_DIR/$APP_NAME" "$DMG_STAGE/$APP_NAME"
 
 # Make setup.sh executable
-chmod +x "$INSTALL_DIR/setup.sh"
+chmod +x "$DMG_STAGE/$APP_NAME/setup.sh"
 
-# Create desktop shortcut (symlink)
-ln -sf "$INSTALL_DIR/setup.sh" "$HOME/Desktop/EduVidGen Setup.command"
-chmod +x "$HOME/Desktop/EduVidGen Setup.command"
+# Create a nice .command launcher that clients double-click
+cat > "$DMG_STAGE/$APP_NAME/Install EduVidGen.command" << 'LAUNCHER'
+#!/bin/bash
+# Edu Video Gen — Installer Launcher
+# Double-click this file to start setup
 
-# Open the setup wizard automatically after install
-open -a Terminal "$INSTALL_DIR/setup.sh" &
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-exit 0
-POSTINSTALL
-chmod +x "$STAGE_DIR/scripts-pkg/postinstall"
+# Copy to Applications
+APP_DIR="/Applications/EduVidGen"
+if [ ! -d "$APP_DIR" ] || [ "$SCRIPT_DIR" != "$APP_DIR" ]; then
+  echo "Installing to /Applications/EduVidGen..."
+  mkdir -p "$APP_DIR"
+  rsync -a --delete "$SCRIPT_DIR/" "$APP_DIR/"
+  chmod +x "$APP_DIR/setup.sh"
+  chmod +x "$APP_DIR/Install EduVidGen.command"
+  echo "Installed!"
+  echo ""
+  # Run setup from the installed location
+  exec bash "$APP_DIR/setup.sh"
+else
+  exec bash "$SCRIPT_DIR/setup.sh"
+fi
+LAUNCHER
+chmod +x "$DMG_STAGE/$APP_NAME/Install EduVidGen.command"
 
-# Build component package
-pkgbuild \
-  --root "$STAGE_DIR/$APP_NAME" \
-  --identifier "$PKG_ID" \
-  --version "$VERSION" \
-  --install-location "$INSTALL_LOCATION" \
-  --scripts "$STAGE_DIR/scripts-pkg" \
-  "$COMPONENT_PKG" 2>&1 | tail -1
+# Create the DMG (two-step: create temp read-write, then convert to compressed)
+TEMP_DMG="$DIST_DIR/tmp-${SLUG}.dmg"
+rm -f "$TEMP_DMG" "$DMG_PATH"
 
-# Create distribution XML for productbuild
-cat > "$STAGE_DIR/distribution.xml" << DISTXML
-<?xml version="1.0" encoding="utf-8"?>
-<installer-gui-script minSpecVersion="2">
-    <title>Edu Video Gen</title>
-    <welcome file="welcome.html" mime-type="text/html"/>
-    <background file="background.png" alignment="bottomleft" scaling="none"/>
-    <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
-    <choices-outline>
-        <line choice="default">
-            <line choice="$PKG_ID"/>
-        </line>
-    </choices-outline>
-    <choice id="default"/>
-    <choice id="$PKG_ID" visible="false">
-        <pkg-ref id="$PKG_ID"/>
-    </choice>
-    <pkg-ref id="$PKG_ID" version="$VERSION" onConclusion="none">${APP_NAME}-component.pkg</pkg-ref>
-</installer-gui-script>
-DISTXML
+# Calculate size needed (source folder size + 10MB padding)
+DMG_SIZE_KB=$(du -sk "$DMG_STAGE" | cut -f1)
+DMG_SIZE_MB=$(( (DMG_SIZE_KB / 1024) + 10 ))
 
-# Create welcome HTML
-mkdir -p "$STAGE_DIR/resources"
-cat > "$STAGE_DIR/resources/welcome.html" << 'WELCOME'
-<html>
-<body style="font-family: -apple-system, Helvetica, sans-serif; padding: 20px; color: #333;">
-<h2 style="font-weight: 600; margin-bottom: 8px;">Edu Video Gen</h2>
-<p style="color: #666; line-height: 1.6;">
-This will install the AI video generation pipeline on your Mac.
-</p>
-<p style="color: #666; line-height: 1.6;">
-After installation, a setup wizard will open automatically in your browser to complete the configuration.
-</p>
-<p style="margin-top: 20px; font-size: 13px; color: #999;">
-Installs to: /Applications/EduVidGen
-</p>
-</body>
-</html>
-WELCOME
+hdiutil create -size "${DMG_SIZE_MB}m" -fs HFS+ -volname "$APP_NAME" "$TEMP_DMG" -quiet
+# Detach any stale mounts with same volume name
+hdiutil detach "/Volumes/$APP_NAME" 2>/dev/null || true
 
-# Build product (final .pkg with welcome screen)
-productbuild \
-  --distribution "$STAGE_DIR/distribution.xml" \
-  --resources "$STAGE_DIR/resources" \
-  --package-path "$DIST_DIR" \
-  "$PKG_PATH" 2>&1 | tail -1
-
-rm -f "$COMPONENT_PKG"
-PKG_SIZE=$(du -sh "$PKG_PATH" | cut -f1)
-echo "  Mac installer: $PKG_PATH ($PKG_SIZE)"
+MOUNT_DIR=$(hdiutil attach "$TEMP_DMG" -nobrowse 2>/dev/null | grep "Apple_HFS" | sed 's/.*Apple_HFS[[:space:]]*//')
+echo "  Mounted at: $MOUNT_DIR"
+# Copy app folder first, then create symlink inside mounted volume
+cp -R "$DMG_STAGE/$APP_NAME" "${MOUNT_DIR}/"
+ln -s /Applications "${MOUNT_DIR}/Applications"
+sync
+hdiutil detach "${MOUNT_DIR}" -force -quiet 2>/dev/null || true
+hdiutil convert "$TEMP_DMG" -format UDZO -o "$DMG_PATH" -quiet 2>/dev/null
+rm -f "$TEMP_DMG"
+rm -rf "$DMG_STAGE"
+DMG_SIZE=$(du -sh "$DMG_PATH" | cut -f1)
+echo "  Mac installer: $DMG_PATH ($DMG_SIZE)"
 
 # ═══════════════════════════════════════
 # Windows Inno Setup script (.iss)
@@ -271,7 +249,7 @@ rm -rf "$STAGE_DIR"
 
 echo ""
 echo "Done! Deliverables in $DIST_DIR/:"
-echo "  Mac:     ${APP_NAME}-${SLUG}-${DATE}.pkg"
+echo "  Mac:     ${APP_NAME}-${SLUG}-${DATE}.dmg"
 echo "  Windows: ${APP_NAME}-${SLUG}-${DATE}.iss (compile to .exe)"
 echo "  Zip:     ${APP_NAME}-${SLUG}-${DATE}.zip (fallback)"
 echo ""
