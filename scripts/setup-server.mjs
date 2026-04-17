@@ -47,6 +47,9 @@ function getExistingConfig() {
       ? `${process.env.USERPROFILE}\\Videos\\EduVidGen`
       : `${process.env.HOME}/Videos/EduVidGen`;
 
+  // Show the actual plugin directory for debugging
+  config.pluginDir = PLUGIN_DIR;
+
   return config;
 }
 
@@ -372,7 +375,7 @@ const HTML = `<!DOCTYPE html>
     <p>Your video generation pipeline is ready to go.</p>
     <button class="btn-primary" onclick="openClaude()" style="max-width:280px;margin:0 auto">Open Claude Code</button>
     <p class="msg msg-info" style="margin-top:16px">
-      Type <code>/edu-video</code> to generate your first video.
+      Type <code>/generate-video</code> to generate your first video.
     </p>
   </div>
 </div>
@@ -648,6 +651,19 @@ function readBody(req) {
     req.on('end', () => resolve(data));
   });
 }
+
+// Kill any existing process on this port before starting
+import { execFileSync } from 'child_process';
+try {
+  if (process.platform === 'win32') {
+    const out = execFileSync('powershell', ['-NoProfile', '-Command',
+      `(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue).OwningProcess`
+    ], { encoding: 'utf-8', timeout: 5000 }).trim();
+    if (out && out !== '0') {
+      execFileSync('taskkill', ['/F', '/PID', out], { timeout: 5000 });
+    }
+  }
+} catch {}
 
 server.listen(port, () => {
   const url = `http://localhost:${port}`;

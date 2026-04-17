@@ -1,11 +1,29 @@
 ---
-name: edu-vid-gen
+name: generate-video
 description: Generate an educational explainer video for a given topic and school class. Cloud-native Google Drive-first pipeline with budget tiers (Low/Medium/High), collaborative review gates at every milestone, full observability via Google Sheets tracker, and Google Docs for editable briefs. Audio-first architecture with VO-driven clip planning, Gemini-powered validation, MoviePy compositor, ambient audio layers, and multi-model video backends (Veo, Wan). Use this skill when the user asks to create an educational video, generate a video for a class/topic, or wants to produce animated explainer content. Supports per-video output folder override — user can say "save this video in [path]" to change where files are saved for a single run.
 ---
 
 # Edu Video Generator V2
 
 Follow each phase exactly and in order. Heavy content lives in `references/` — load only when needed.
+
+## Auto Mode (Unattended Pipeline)
+
+**`AUTO_MODE`** is a top-level flag collected in Phase 1. When `AUTO_MODE=yes`:
+
+- **Skip every review gate (G1, G2, G3, G4, G5, G6, G7, G8).** Do NOT present "STOP / waiting for client review" prompts. Do NOT call `read-review.mjs` for approval. Do NOT wait for a client reply.
+- **Still sync all artifacts to Drive** (brief, timeline, characters, images, clips, composite, post-prod). Syncing is for observability; it does not gate the pipeline.
+- **Still log gate events to the tracker** with decision = `auto-approved`.
+- **Validation gates remain active.** Per-clip Gemini validation (score < 7) and final validation (ship_ready check) still pause for regeneration decisions — but in auto-mode, auto-regenerate up to 2 times, then accept the best score and continue.
+- **Cost approval (G0) is pre-authorized** by the user's answer to the auto-mode question. Log the estimate to tracker and proceed without stopping.
+- **Use smart defaults** for anything you would normally ask mid-pipeline (timeline edits, annotation text, character approvals, etc.). Log the default chosen to the tracker.
+- **Recommend to user**: suggest they launch Claude Code with `--dangerously-skip-permissions` (or use the "bypass permissions" mode) so the pipeline runs without per-tool confirmation prompts.
+
+When `AUTO_MODE=no` (default), follow all review gates as originally specified.
+
+Throughout this document, whenever you see "**STOP. Wait for client...**" or "⏸️ STOPPING — waiting for your review", that instruction applies ONLY when `AUTO_MODE=no`. In auto-mode, replace the stop with: log the gate to tracker as `auto-approved`, post a one-line status update, and continue immediately.
+
+---
 
 ## Real-Time Tracker Logging
 
@@ -54,6 +72,12 @@ set -a; source "__PLUGIN_DIR__/.env" 2>/dev/null; set +a
 **IMPORTANT:** Use the `AskUserQuestion` tool for EVERY input below. Collect one question at a time with clear defaults and options shown. Do NOT dump all questions in a single text block.
 
 Ask the user:
+
+0. **Auto Mode** — Yes / No (default: No)
+   - **Yes** — Unattended pipeline. After this brief is collected, the entire video generation runs end-to-end without any review gates, approval prompts, or mid-pipeline questions. All artifacts are still synced to Drive for observability, but nothing blocks on human input. Cost is pre-authorized by answering Yes here. **Recommended:** launch Claude Code with `--dangerously-skip-permissions` so tool calls don't prompt either.
+   - **No** — Default interactive flow with review gates at brief, timeline, characters, audio, keyframes, clips, final, and post-production.
+   - Save as `AUTO_MODE` (`yes` or `no`).
+   - If user picks Yes, print: `⚡ AUTO MODE ENABLED — pipeline will run unattended. Tip: restart Claude Code with --dangerously-skip-permissions for fully hands-off execution.`
 
 1. **Topic** — educational concept (e.g. "Water Cycle", "Photosynthesis")
 2. **Class** — grade level (e.g. "Class 5", "7th grade")
@@ -117,7 +141,7 @@ Ask the user:
     
     Use `tierConfig` throughout all subsequent phases to select models, transition strategy, and compositing script.
 
-Save variables: `TOPIC`, `CLASS`, `NARRATION_LANG`, `CHAPTER_SOURCE`, `STYLE`, `CHARACTER_MODE`, `DURATION_SEC`, `ASPECT`, `AMBIENT_CATEGORY`, `SUBTITLES_ENABLED`, `ANNOTATIONS_ENABLED`, `BUDGET_TIER`
+Save variables: `AUTO_MODE`, `TOPIC`, `CLASS`, `NARRATION_LANG`, `CHAPTER_SOURCE`, `STYLE`, `CHARACTER_MODE`, `DURATION_SEC`, `ASPECT`, `AMBIENT_CATEGORY`, `SUBTITLES_ENABLED`, `ANNOTATIONS_ENABLED`, `BUDGET_TIER`
 
 13. **Output folder** (optional) — If the user specified a custom folder for this video (e.g. "save this video in ~/Desktop/review/"), use that path. Otherwise use the default from `.env`.
 

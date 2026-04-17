@@ -9,13 +9,13 @@ Recreate an existing character in a new pose, scene, or expression using their r
 
 ## When to Use
 
-- User wants to reuse a character from a previous `/edu-video` project in a new context
+- User wants to reuse a character from a previous `/generate-video` project in a new context
 - User wants to place an existing character in a custom scene or illustration
 - User wants to generate a character in a specific pose or expression for print, social media, or other use
 
 ## Prerequisites
 
-The character must have been created with the `/edu-video` skill. You need:
+The character must have been created with the `/generate-video` skill. You need:
 
 1. **Recreation prompt file**: `{project}/characters/{name}-recreation-prompt.md`
 2. **Reference sheet(s)**: `{project}/characters/{name}-poses.jpg` and/or `{name}-expressions.jpg`

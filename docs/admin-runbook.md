@@ -110,7 +110,7 @@ Send the `.pkg` (Mac) or `.exe` (Windows) or `.zip` to the client with this mess
 > 1. Double-click the installer file I sent you
 > 2. Follow the install wizard (Mac: click Continue through steps)
 > 3. A browser page will open — sign into your Google account when prompted
-> 4. Claude Code will open automatically — type `/edu-video` to create your first video!
+> 4. Claude Code will open automatically — type `/generate-video` to create your first video!
 >
 > That's it. If anything goes wrong, just message me.
 

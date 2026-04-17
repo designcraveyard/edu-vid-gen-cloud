@@ -81,11 +81,24 @@ console.log('\n--- Google Workspace Authentication ---');
 console.log('Opening browser for sign-in...\n');
 
 // Open browser safely using execFile (no shell injection risk)
-const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
-const openArgs = process.platform === 'win32' ? ['/c', 'start', authUrl] : [authUrl];
-execFile(openCmd, openArgs, (err) => {
-  if (err) console.log(`Could not open browser automatically. Visit:\n${authUrl}\n`);
-});
+// Open browser — on Windows, write a temp .html redirect file to avoid URL mangling
+import { tmpdir } from 'os';
+import { join } from 'path';
+if (process.platform === 'win32') {
+  const tmpFile = join(tmpdir(), 'eduvidgen-auth.html');
+  writeFileSync(tmpFile, `<html><head><meta http-equiv="refresh" content="0;url=${authUrl}"></head><body>Redirecting to Google sign-in...</body></html>`);
+  execFile('cmd', ['/c', 'start', '', tmpFile], (err) => {
+    if (err) console.log(`Could not open browser. Visit:\n${authUrl}\n`);
+  });
+} else if (process.platform === 'darwin') {
+  execFile('open', [authUrl], (err) => {
+    if (err) console.log(`Could not open browser. Visit:\n${authUrl}\n`);
+  });
+} else {
+  execFile('xdg-open', [authUrl], (err) => {
+    if (err) console.log(`Could not open browser. Visit:\n${authUrl}\n`);
+  });
+}
 
 console.log(`If browser didn't open, visit:\n${authUrl}\n`);
 
@@ -126,6 +139,24 @@ const server = createServer(async (req, res) => {
     process.exit(1);
   }
 });
+
+// Kill any existing process on port 3847 before starting
+import { execFileSync } from 'child_process';
+try {
+  if (process.platform === 'win32') {
+    // Use PowerShell to find and kill process on port 3847
+    const out = execFileSync('powershell', ['-NoProfile', '-Command',
+      '(Get-NetTCPConnection -LocalPort 3847 -State Listen -ErrorAction SilentlyContinue).OwningProcess'
+    ], { encoding: 'utf-8', timeout: 5000 }).trim();
+    if (out && out !== '0') {
+      execFileSync('taskkill', ['/F', '/PID', out], { timeout: 5000 });
+      console.log(`  Killed old process on port 3847 (PID ${out})`);
+    }
+  } else {
+    const out = execFileSync('lsof', ['-ti', ':3847'], { encoding: 'utf-8', timeout: 5000 }).trim();
+    if (out) { execFileSync('kill', ['-9', out], { timeout: 5000 }); }
+  }
+} catch {}
 
 server.listen(3847, () => {
   console.log('Waiting for Google sign-in callback on http://localhost:3847/callback ...');

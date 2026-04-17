@@ -141,6 +141,31 @@ fi
 LAUNCHER
 chmod +x "$DMG_STAGE/$APP_NAME/Install EduVidGen.command"
 
+# Post-install launcher: opens Claude Code with plugin loaded (interactive mode)
+cat > "$DMG_STAGE/$APP_NAME/Open EduVidGen.command" << 'LAUNCHER'
+#!/bin/bash
+APP_DIR="/Applications/EduVidGen"
+if [ ! -d "$APP_DIR" ]; then
+  APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+fi
+cd "$APP_DIR"
+exec claude --plugin-dir .
+LAUNCHER
+chmod +x "$DMG_STAGE/$APP_NAME/Open EduVidGen.command"
+
+# Post-install launcher: auto-mode (unattended, bypass permissions)
+cat > "$DMG_STAGE/$APP_NAME/Open EduVidGen (Auto Mode).command" << 'LAUNCHER'
+#!/bin/bash
+# Unattended auto-mode. Answer YES when asked "Auto Mode" in the brief.
+APP_DIR="/Applications/EduVidGen"
+if [ ! -d "$APP_DIR" ]; then
+  APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+fi
+cd "$APP_DIR"
+exec claude --plugin-dir . --dangerously-skip-permissions
+LAUNCHER
+chmod +x "$DMG_STAGE/$APP_NAME/Open EduVidGen (Auto Mode).command"
+
 # Create the DMG (two-step: create temp read-write, then convert to compressed)
 TEMP_DMG="$DIST_DIR/tmp-${SLUG}.dmg"
 rm -f "$TEMP_DMG" "$DMG_PATH"
@@ -167,71 +192,65 @@ DMG_SIZE=$(du -sh "$DMG_PATH" | cut -f1)
 echo "  Mac installer: $DMG_PATH ($DMG_SIZE)"
 
 # ═══════════════════════════════════════
-# Windows Inno Setup script (.iss)
+# Windows .exe (self-extracting archive)
 # ═══════════════════════════════════════
 
 echo ""
-echo "Generating Windows Inno Setup script..."
+echo "Building Windows .exe installer..."
 
-ISS_PATH="$DIST_DIR/${APP_NAME}-${SLUG}-${DATE}.iss"
+EXE_PATH="$DIST_DIR/${APP_NAME}-${SLUG}-${DATE}-setup.exe"
 
-cat > "$ISS_PATH" << INNO
-; Edu Video Gen — Windows Installer
-; Compile with Inno Setup: https://jrsoftware.org/isinfo.php
+# Copy install.bat from repo (standalone file with proper CRLF endings)
+cp "$SCRIPT_DIR/install.bat" "$STAGE_DIR/install.bat"
 
-#define MyAppName "Edu Video Gen"
-#define MyAppVersion "$VERSION"
-#define MyAppPublisher "EduVidGen"
-#define MyAppURL "https://github.com/designcraveyard/edu-vid-gen-cloud"
+# Ensure all .bat files in stage have CRLF line endings
+find "$STAGE_DIR" -name "*.bat" -exec perl -pi -e 's/(?<!\r)\n/\r\n/g' {} \;
 
-[Setup]
-AppId={{8F3E4A2B-1C5D-4E6F-A7B8-9C0D1E2F3A4B}
-AppName={#MyAppName}
-AppVersion={#MyAppVersion}
-AppPublisher={#MyAppPublisher}
-AppPublisherURL={#MyAppURL}
-DefaultDirName={autopf}\\EduVidGen
-DefaultGroupName={#MyAppName}
-OutputDir=.
-OutputBaseFilename=${APP_NAME}-${SLUG}-${DATE}-setup
-Compression=lzma2/ultra64
-SolidCompression=yes
-SetupIconFile=compiler:SetupClassicIcon.ico
-WizardStyle=modern
-PrivilegesRequired=lowest
-DisableProgramGroupPage=yes
+# Create 7z archive of the staged content + installer script
+ARCHIVE_PATH="$DIST_DIR/tmp-archive-${SLUG}.7z"
+rm -f "$ARCHIVE_PATH"
 
-[Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
+cd "$STAGE_DIR"
+7z a -t7z -mx=9 "$SCRIPT_DIR/$ARCHIVE_PATH" . -bso0 -bsp0
+cd "$SCRIPT_DIR"
 
-[Files]
-Source: "stage-${SLUG}\\EduVidGen\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+# Create the SFX config file
+SFX_CONFIG="$DIST_DIR/sfx-config-${SLUG}.txt"
+cat > "$SFX_CONFIG" << SFXCFG
+;!@Install@!UTF-8!
+Title="Edu Video Gen - Installer"
+BeginPrompt="Install Edu Video Gen - AI Video Pipeline?"
+RunProgram="install.bat"
+;!@InstallEnd@!
+SFXCFG
 
-[Icons]
-Name: "{group}\\{#MyAppName} Setup"; Filename: "{app}\\setup.bat"
-Name: "{autodesktop}\\{#MyAppName} Setup"; Filename: "{app}\\setup.bat"; Comment: "Run EduVidGen setup wizard"
+# Download 7-Zip SFX installer module if not cached
+# 7zSD.sfx = installer module that extracts to temp, runs a program, cleans up
+SFX_MODULE="$DIST_DIR/7zSD.sfx"
+if [ ! -f "$SFX_MODULE" ]; then
+  echo "  Downloading 7-Zip SFX installer module..."
+  SFX_TEMP="$DIST_DIR/7z-sfx-temp"
+  mkdir -p "$SFX_TEMP"
+  curl -sL "https://www.7-zip.org/a/lzma2301.7z" -o "$SFX_TEMP/lzma.7z"
+  cd "$SFX_TEMP"
+  7z x lzma.7z bin/7zSD.sfx -bso0 -bsp0 2>/dev/null || true
+  cd "$SCRIPT_DIR"
+  if [ -f "$SFX_TEMP/bin/7zSD.sfx" ]; then
+    cp "$SFX_TEMP/bin/7zSD.sfx" "$SFX_MODULE"
+  fi
+  rm -rf "$SFX_TEMP"
+fi
 
-[Run]
-Filename: "{app}\\setup.bat"; Description: "Run setup wizard now"; Flags: postinstall nowait skipifsilent shellexec
-
-[Messages]
-WelcomeLabel2=This will install the AI video generation pipeline on your computer.%n%nAfter installation, a setup wizard will guide you through the final configuration (API keys, Google sign-in, output folder).
-FinishedLabel=Setup has been installed. Click Finish to run the setup wizard and complete configuration.
-INNO
-
-echo "  Windows script: $ISS_PATH"
-
-# Check if we can compile the .exe on this Mac
-if command -v iscc &>/dev/null; then
-  echo "  Compiling .exe with Inno Setup..."
-  iscc "$ISS_PATH" 2>&1 | tail -3
-  EXE_PATH="$DIST_DIR/${APP_NAME}-${SLUG}-${DATE}-setup.exe"
-  [ -f "$EXE_PATH" ] && echo "  Windows installer: $EXE_PATH ($(du -sh "$EXE_PATH" | cut -f1))"
+if [ -f "$SFX_MODULE" ]; then
+  # Combine: SFX module + config + archive = .exe
+  cat "$SFX_MODULE" "$SFX_CONFIG" "$ARCHIVE_PATH" > "$EXE_PATH"
+  rm -f "$ARCHIVE_PATH" "$SFX_CONFIG"
+  EXE_SIZE=$(du -sh "$EXE_PATH" | cut -f1)
+  echo "  Windows installer: $EXE_PATH ($EXE_SIZE)"
 else
-  echo ""
-  echo "  To compile the .exe installer:"
-  echo "    Option A (Mac): brew install --cask innosetup && iscc $ISS_PATH"
-  echo "    Option B (Win): Install Inno Setup, open $ISS_PATH, click Compile"
+  echo "  [!!] Could not download SFX module."
+  echo "  Falling back to zip-only distribution."
+  rm -f "$ARCHIVE_PATH" "$SFX_CONFIG"
 fi
 
 # ── Also build zip as fallback ──
@@ -250,6 +269,6 @@ rm -rf "$STAGE_DIR"
 echo ""
 echo "Done! Deliverables in $DIST_DIR/:"
 echo "  Mac:     ${APP_NAME}-${SLUG}-${DATE}.dmg"
-echo "  Windows: ${APP_NAME}-${SLUG}-${DATE}.iss (compile to .exe)"
+[ -f "$EXE_PATH" ] && echo "  Windows: ${APP_NAME}-${SLUG}-${DATE}-setup.exe"
 echo "  Zip:     ${APP_NAME}-${SLUG}-${DATE}.zip (fallback)"
 echo ""

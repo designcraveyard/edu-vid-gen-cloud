@@ -43,7 +43,7 @@ edu-vid-gen-plugin/
 ├── CLAUDE.md                    # This file (dev guide)
 ├── README.md                    # Installation + usage docs
 ├── skills/
-│   ├── edu-vid-gen/             # Main video generation skill (6 phases)
+│   ├── generate-video/             # Main video generation skill (6 phases)
 │   │   ├── SKILL.md
 │   │   └── references/          # Prompting, validation, audio, transitions, errors
 │   ├── vo-sync/                 # Post-production compositor skill
@@ -79,20 +79,20 @@ All artifacts are uploaded to Google Drive under a per-project folder structure:
 ## How to Modify This Plugin
 
 ### Fixing prompts (most common)
-- Image prompt template: `skills/edu-vid-gen/references/prompting.md` → "Image Prompt Building"
-- Veo prompt template: `skills/edu-vid-gen/references/prompting.md` → "Veo Prompt Structure"
-- Audio tags: `skills/edu-vid-gen/references/audio-tags.md`
+- Image prompt template: `skills/generate-video/references/prompting.md` → "Image Prompt Building"
+- Veo prompt template: `skills/generate-video/references/prompting.md` → "Veo Prompt Structure"
+- Audio tags: `skills/generate-video/references/audio-tags.md`
 
 ### Fixing flow/phase issues
-- Main pipeline phases: `skills/edu-vid-gen/SKILL.md`
+- Main pipeline phases: `skills/generate-video/SKILL.md`
 - Batch pipeline: `skills/batch-gen/SKILL.md`
-- Validation criteria: `skills/edu-vid-gen/references/validation.md`
+- Validation criteria: `skills/generate-video/references/validation.md`
 
 ### Adding a new video backend
 1. Create `scripts/backends/{name}.py` following the pattern in `veo.py` or `wan.py`
 2. Register in `scripts/backends/__init__.py`
 3. Update `scripts/generate-video.py` to accept the new `--backend` value
-4. Update `skills/edu-vid-gen/references/api-errors.md` with backend-specific errors
+4. Update `skills/generate-video/references/api-errors.md` with backend-specific errors
 
 ### Adding a new skill
 1. Create `skills/{skill-name}/SKILL.md` with frontmatter (name, description)

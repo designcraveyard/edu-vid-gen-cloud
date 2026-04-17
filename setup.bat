@@ -1,199 +1,251 @@
 @echo off
 chcp 65001 >nul 2>&1
 title Edu Video Gen - Setup Wizard
-setlocal enabledelayedexpansion
 cd /d "%~dp0"
 set "SCRIPT_DIR=%~dp0"
 
 echo.
 echo  ========================================
-echo    Edu Video Gen - Setup Wizard
+echo    Edu Video Gen - One-Click Setup
+echo  ========================================
+echo.
+echo  This will install everything you need.
+echo  Just sit back — takes about 5-10 minutes.
+echo.
 echo  ========================================
 echo.
 
-REM ── Step 1: Check Prerequisites ──
+REM ════════════════════════════════════════════
+REM  STEP 1: Chocolatey (package manager)
+REM ════════════════════════════════════════════
 
-echo  [Step 1/4] Checking prerequisites...
+echo  [Step 1/7] Checking Chocolatey...
+
+where choco >nul 2>&1
+if %errorlevel%==0 (
+    echo    [OK] Chocolatey already installed
+) else (
+    echo    Installing Chocolatey...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
+    if exist "C:\ProgramData\chocolatey\bin\choco.exe" set "PATH=C:\ProgramData\chocolatey\bin;%PATH%"
+)
 echo.
 
-set "NEED_NODE=0"
-set "NEED_PYTHON=0"
-set "NEED_FFMPEG=0"
-set "PY_CMD="
+REM ════════════════════════════════════════════
+REM  STEP 2: Install all system tools via choco
+REM ════════════════════════════════════════════
+
+echo  [Step 2/7] Installing system tools...
+echo.
 
 where node >nul 2>&1
 if %errorlevel%==0 (
-    for /f "tokens=*" %%v in ('node -v') do echo    [OK] Node.js %%v
+    for /f "tokens=*" %%v in ('node -v 2^>nul') do echo    [OK] Node.js %%v
 ) else (
-    echo    [..] Node.js - not found
-    set "NEED_NODE=1"
+    echo    Installing Node.js...
+    choco install nodejs-lts -y
+    echo.
 )
 
-where python >nul 2>&1
+REM Check for real Python (not Microsoft Store stub)
+set "HAVE_PYTHON=0"
+python --version >nul 2>&1
 if %errorlevel%==0 (
-    for /f "tokens=2" %%v in ('python --version 2^>^&1') do echo    [OK] Python %%v
-    set "PY_CMD=python"
-) else (
-    where python3 >nul 2>&1
-    if !errorlevel!==0 (
-        echo    [OK] Python 3 found
-        set "PY_CMD=python3"
-    ) else (
-        echo    [..] Python 3 - not found
-        set "NEED_PYTHON=1"
+    python -c "import sys" >nul 2>&1
+    if %errorlevel%==0 (
+        for /f "tokens=2" %%v in ('python --version 2^>^&1') do echo    [OK] Python %%v
+        set "HAVE_PYTHON=1"
     )
+)
+if "%HAVE_PYTHON%"=="0" (
+    echo    [..] Python not found (or Microsoft Store stub)
+    echo    Installing real Python via Chocolatey...
+    choco install python3 -y
+    echo.
 )
 
 where ffmpeg >nul 2>&1
 if %errorlevel%==0 (
-    echo    [OK] ffmpeg installed
+    echo    [OK] ffmpeg already installed
 ) else (
-    echo    [..] ffmpeg - not found
-    set "NEED_FFMPEG=1"
-)
-
-echo.
-
-REM ── If everything is present, skip to packages ──
-if "%NEED_NODE%%NEED_PYTHON%%NEED_FFMPEG%"=="000" (
-    echo    All prerequisites found!
-    echo.
-    goto :install_packages
-)
-
-REM ── Try winget ──
-where winget >nul 2>&1
-if %errorlevel% neq 0 goto :manual_install
-
-echo    Installing missing tools via winget...
-echo    This may take 2-5 minutes.
-echo.
-
-if "%NEED_NODE%"=="1" (
-    echo    Installing Node.js...
-    winget install OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
-    echo.
-)
-
-if "%NEED_PYTHON%"=="1" (
-    echo    Installing Python 3.12...
-    winget install Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements
-    echo.
-)
-
-if "%NEED_FFMPEG%"=="1" (
     echo    Installing ffmpeg...
-    winget install Gyan.FFmpeg --silent --accept-package-agreements --accept-source-agreements
+    choco install ffmpeg -y
     echo.
 )
 
-echo  ------------------------------------------
-echo.
-echo    Tools installed! But Windows needs a
-echo    fresh terminal to find them.
-echo.
-echo    Close this window, open a new one,
-echo    and double-click setup.bat again.
-echo.
-echo  ------------------------------------------
-echo.
-pause
-exit /b 0
+where git >nul 2>&1
+if %errorlevel%==0 (
+    for /f "tokens=3" %%v in ('git --version 2^>nul') do echo    [OK] Git %%v
+) else (
+    echo    Installing Git...
+    choco install git -y
+    echo.
+)
 
-:manual_install
-echo  ------------------------------------------
-echo.
-echo    winget not available. Install manually:
-echo.
-if "%NEED_NODE%"=="1" echo      Node.js  :  https://nodejs.org/
-if "%NEED_PYTHON%"=="1" echo      Python 3 :  https://www.python.org/downloads/
-if "%NEED_FFMPEG%"=="1" echo      ffmpeg   :  https://ffmpeg.org/download.html
-echo.
-echo    Then double-click setup.bat again.
-echo.
-echo  ------------------------------------------
-echo.
-pause
-exit /b 1
+REM Refresh PATH from Chocolatey
+call refreshenv >nul 2>&1
 
-:install_packages
+REM Also manually add common paths in case refreshenv didn't work
+if exist "C:\Program Files\nodejs\node.exe" set "PATH=C:\Program Files\nodejs;%PATH%"
+if exist "%ProgramFiles%\nodejs\node.exe" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+for /f "usebackq tokens=*" %%p in (`powershell -NoProfile -Command "[System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')" 2^>nul`) do set "PATH=%%p"
 
-REM ── Step 2: Install Python packages ──
+echo.
 
-echo  [Step 2/4] Installing Python packages...
-echo            google-genai, moviepy, Pillow, requests
+REM Verify node is available (critical for rest of setup)
+where node >nul 2>&1
+if %errorlevel% neq 0 (
+    echo  [!!] Node.js installed but not in PATH yet.
+    echo      Close this window, open a new terminal,
+    echo      and run setup.bat again.
+    echo.
+    pause
+    exit /b 0
+)
+
+REM ════════════════════════════════════════════
+REM  STEP 3: Python packages
+REM ════════════════════════════════════════════
+
+echo  [Step 3/7] Installing Python packages...
+echo.
+
+set "PY_CMD="
+where python >nul 2>&1
+if %errorlevel%==0 (
+    set "PY_CMD=python"
+) else (
+    where python3 >nul 2>&1
+    if %errorlevel%==0 set "PY_CMD=python3"
+)
 
 if defined PY_CMD (
-    %PY_CMD% -m pip install google-genai moviepy Pillow requests -q 2>nul
-    if !errorlevel! neq 0 (
-        echo    [!!] pip install failed - trying alternate...
-        pip install google-genai moviepy Pillow requests -q 2>nul
-    )
-) else (
-    pip install google-genai moviepy Pillow requests -q 2>nul
-    if !errorlevel! neq 0 (
-        python -m pip install google-genai moviepy Pillow requests -q 2>nul
-    )
-)
-echo    [OK] Python packages ready
-echo.
-
-REM ── Step 3: Install Node.js packages ──
-
-echo  [Step 3/4] Installing Node.js packages...
-
-if not exist "%SCRIPT_DIR%scripts\package.json" (
-    echo    [!!] scripts/package.json not found - skipping npm install
+    %PY_CMD% -m pip install google-genai moviepy Pillow requests
     echo.
-    goto :launch_wizard
+    echo    [OK] Python packages installed
+) else (
+    echo    [!!] Python not in PATH — packages skipped.
+    echo        Run manually later: pip install google-genai moviepy Pillow requests
 )
-
-pushd "%SCRIPT_DIR%scripts"
-call npm install --silent 2>nul
-if %errorlevel% neq 0 (
-    echo    [!!] npm install had warnings, retrying...
-    call npm install 2>nul
-)
-popd
-echo    [OK] Node packages ready
 echo.
 
-:launch_wizard
+REM ════════════════════════════════════════════
+REM  STEP 4: Node.js packages
+REM ════════════════════════════════════════════
 
-REM ── Step 4: Launch setup wizard ──
+echo  [Step 4/7] Installing Node.js packages...
 
-echo  [Step 4/4] Opening setup wizard in browser...
+if exist "%SCRIPT_DIR%scripts\package.json" (
+    pushd "%SCRIPT_DIR%scripts"
+    call npm install
+    popd
+    echo    [OK] Node packages installed
+) else (
+    echo    [!!] scripts/package.json not found — skipped
+)
+echo.
+
+REM ════════════════════════════════════════════
+REM  STEP 5: Claude Code
+REM ════════════════════════════════════════════
+
+echo  [Step 5/7] Installing Claude Code...
+
+where claude >nul 2>&1
+if %errorlevel%==0 (
+    echo    [OK] Claude Code already installed
+) else (
+    echo    Installing Claude Code via npm...
+    call npm install -g @anthropic-ai/claude-code
+    echo.
+    where claude >nul 2>&1
+    if %errorlevel%==0 (
+        echo    [OK] Claude Code installed
+    ) else (
+        echo    [!!] Claude Code install may need a terminal restart.
+    )
+)
+echo.
+
+REM ════════════════════════════════════════════
+REM  STEP 6: Setup wizard (API keys, auth)
+REM ════════════════════════════════════════════
+
+echo  [Step 6/7] Opening setup wizard in browser...
 echo.
 echo  ------------------------------------------
 echo    Upload your JSON files, paste API keys,
-echo    and click Save.
+echo    pick your output folder, and sign into
+echo    Google.
 echo.
 echo    DO NOT close this window until done.
 echo  ------------------------------------------
 echo.
 
-REM Check if setup-server.mjs exists
-if not exist "%SCRIPT_DIR%scripts\setup-server.mjs" (
-    echo  [ERROR] scripts\setup-server.mjs not found!
-    echo  Make sure you have the full project files.
-    echo.
-    pause
-    exit /b 1
+if exist "%SCRIPT_DIR%scripts\setup-server.mjs" (
+    node "%SCRIPT_DIR%scripts\setup-server.mjs"
+) else (
+    echo    [!!] setup-server.mjs not found — skipping wizard.
+    echo        Run manually: node scripts\setup-server.mjs
+)
+echo.
+
+REM ════════════════════════════════════════════
+REM  STEP 7: Git repo + Claude plugin
+REM ════════════════════════════════════════════
+
+echo  [Step 7/7] Preparing Claude Code...
+echo.
+
+cd /d "%SCRIPT_DIR%"
+
+REM Initialize git repo (Claude Code requires it)
+where git >nul 2>&1
+if %errorlevel%==0 (
+    if not exist "%SCRIPT_DIR%.git" (
+        git init >nul 2>&1
+        git add -A >nul 2>&1
+        git commit -m "Initial setup" >nul 2>&1
+        echo    [OK] Git repo initialized
+    ) else (
+        echo    [OK] Git repo exists
+    )
+) else (
+    echo    [!!] Git not found — skipping repo init
 )
 
-node "%SCRIPT_DIR%scripts\setup-server.mjs"
+REM Clean up any old marketplace cache from previous installs
+where claude >nul 2>&1
+if %errorlevel%==0 (
+    claude plugin marketplace remove edu-vid-gen-local >nul 2>&1
+    echo    [OK] Cleaned old plugin cache
+)
 
-if %errorlevel% neq 0 (
+echo.
+echo  ========================================
+echo.
+echo    SETUP COMPLETE!
+echo.
+echo    Type /generate-video in Claude Code to
+echo    generate your first video.
+echo.
+echo  ========================================
+echo.
+
+REM Open Claude Code with plugin loaded in-place (not cached)
+cd /d "%SCRIPT_DIR%"
+where claude >nul 2>&1
+if %errorlevel%==0 (
+    echo  Opening Claude Code...
+    echo  Plugin: %SCRIPT_DIR%
     echo.
-    echo  ------------------------------------------
-    echo  [ERROR] Setup wizard failed to start.
+    start "" cmd /k "cd /d %SCRIPT_DIR% && claude --plugin-dir ."
+) else (
+    echo    Claude Code not found in PATH.
+    echo    Open a new terminal and run:
     echo.
-    echo  Common fixes:
-    echo    1. Make sure Node.js is installed: node -v
-    echo    2. Run: cd scripts ^&^& npm install
-    echo    3. Try again: node scripts\setup-server.mjs
-    echo  ------------------------------------------
-    echo.
+    echo      cd %SCRIPT_DIR%
+    echo      claude --plugin-dir .
 )
 
 pause

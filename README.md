@@ -44,7 +44,7 @@ API keys needed:
 
 ### Generate a single video
 ```
-/edu-video
+/generate-video
 ```
 Interactive 6-phase pipeline. Asks for topic, class, style, and guides you through.
 

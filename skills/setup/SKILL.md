@@ -1,6 +1,6 @@
 ---
 name: setup
-description: First-time setup for edu-vid-gen plugin. Installs prerequisites (ffmpeg, imagemagick, python packages), configures API keys, Google auth (service account + OAuth), sets output directory, and verifies everything works. Run this once on a new machine before using /edu-video. No gcloud CLI needed.
+description: First-time setup for edu-vid-gen plugin. Installs prerequisites (ffmpeg, imagemagick, python packages), configures API keys, Google auth (service account + OAuth), sets output directory, and verifies everything works. Run this once on a new machine before using /generate-video. No gcloud CLI needed.
 argument-hint: "[--check] to verify existing setup without modifying"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "AskUserQuestion"]
 ---
@@ -452,7 +452,7 @@ Gemini API key:   {status}
 Google Workspace: {status}
 Output directory: {path}
 
-You're ready! Run /edu-video to generate your first video.
+You're ready! Run /generate-video to generate your first video.
 
 Tip: You can change the output folder anytime by saying
 "save this video in [path]" during generation, or re-run /setup.

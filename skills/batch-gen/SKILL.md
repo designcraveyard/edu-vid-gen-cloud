@@ -1,11 +1,23 @@
 ---
 name: batch-gen
-description: Generate multiple educational videos from a single batch manifest (batch.json). Phase-batched execution with 4 review gates, cost tracking, and resume support. Uses all existing edu-vid-gen scripts — no new generation tools.
+description: Generate multiple educational videos from a single batch manifest (batch.json). Phase-batched execution with 4 review gates, cost tracking, and resume support. Uses all existing generate-video scripts — no new generation tools.
 ---
 
 # Batch Video Generator
 
-Generate multiple educational videos from a single JSON manifest. Reuses every script from `edu-vid-gen` — this skill only orchestrates the batch flow.
+Generate multiple educational videos from a single JSON manifest. Reuses every script from `generate-video` — this skill only orchestrates the batch flow.
+
+## Auto Mode
+
+Before Phase 0, ask the user: **Auto Mode — Yes / No (default: No)?**
+
+When `AUTO_MODE=yes`:
+- Skip all 4 BATCH REVIEW GATES (Scripts, Characters, Timelines, Images, Flagged Clips). Log each to tracker as `auto-approved` and continue immediately.
+- Skip the Phase 0b cost-approval wait — the user's "Yes" to auto-mode pre-authorizes the estimated cost. Still print the estimate.
+- Auto-regenerate failed clips up to 2 times, then accept best and move on.
+- Recommend the user launch Claude Code with `--dangerously-skip-permissions` for fully hands-off execution.
+
+When `AUTO_MODE=no` (default), run all review gates as specified below.
 
 ## Scripts
 
@@ -19,7 +31,7 @@ All scripts at `__PLUGIN_DIR__/scripts/`. Batch-specific:
 | `validate-sync.py` | Subtitle overlay + Gemini 2.5 Pro sync analysis (Phase 5 self-healing) |
 | `composite-video-first.py` | Video-first fallback compositor (Phase 5 attempt 3) |
 
-All generation scripts from edu-vid-gen are used as-is.
+All generation scripts from generate-video are used as-is.
 
 ---
 
@@ -60,7 +72,7 @@ python3 __PLUGIN_DIR__/scripts/batch-checkpoint.py \
 
 ## Phase 2 — Write Scripts (All Videos)
 
-Follow `edu-vid-gen` Phase 2 rules exactly. After ALL scripts written:
+Follow `generate-video` Phase 2 rules exactly. After ALL scripts written:
 
 ### BATCH REVIEW GATE: Scripts
 Present all scripts. Wait for approval.
@@ -171,8 +183,8 @@ python3 __PLUGIN_DIR__/scripts/batch-checkpoint.py \
 ## Prompt Building
 
 Load references as needed:
-- `edu-vid-gen/references/prompting.md`
-- `edu-vid-gen/references/validation.md`
-- `edu-vid-gen/references/audio-tags.md`
-- `edu-vid-gen/references/transitions.md`
-- `edu-vid-gen/references/api-errors.md`
+- `generate-video/references/prompting.md`
+- `generate-video/references/validation.md`
+- `generate-video/references/audio-tags.md`
+- `generate-video/references/transitions.md`
+- `generate-video/references/api-errors.md`
