@@ -23,10 +23,13 @@ p = argparse.ArgumentParser()
 p.add_argument('--timestamps',     required=True)
 p.add_argument('--audio',          required=True)
 p.add_argument('--output',         default='subtitles-video.mp4')
-p.add_argument('--words-per-line', type=int, default=8)
+p.add_argument('--words-per-line', type=int, default=5)
 p.add_argument('--fps',            type=int, default=30)
 p.add_argument('--width',          type=int, default=1920)
 p.add_argument('--height',         type=int, default=1080)
+p.add_argument('--style',          default='pill', choices=['pill', 'karaoke'],
+               help="pill: YouTube-style single-line rounded pill (default). "
+                    "karaoke: word-by-word highlight with translucent band.")
 # Overlay mode
 p.add_argument('--video',          default=None, help='Overlay subtitles on this video instead of black bg')
 p.add_argument('--clip-start',     type=float, default=None, help='VO start time (seconds) in full-vo for this clip')
@@ -141,15 +144,25 @@ TOTAL_FRAMES = int(DURATION * FPS) + 1
 print(f"  {DURATION:.1f}s → {TOTAL_FRAMES} frames @ {FPS}fps")
 
 # ── Font setup ────────────────────────────────────────────────────────────────
-FONT_SIZE    = 72
-LINE_SPACING = 20  # px between lines of text
-BOTTOM_PAD   = 120 # px from bottom
+# Scale typography to the actual frame size so both 16:9 (e.g. 1248x704,
+# 1920x1080) and 9:16 (e.g. 720x1280, 1080x1920) render proportionally.
+# Reference: 72 px on a 1080-tall frame = ~6.7% of frame height.
+FONT_SCALE   = 0.058           # font size as fraction of frame height
+SIDE_MARGIN  = 0.04            # safe horizontal inset on each side
+BOTTOM_FRAC  = 0.10            # baseline distance from bottom as fraction of H
+LINE_GAP_FRAC = 0.018          # vertical gap between wrapped lines
+
+FONT_SIZE    = max(28, int(H * FONT_SCALE))
+LINE_SPACING = max(10, int(H * LINE_GAP_FRAC))
+BOTTOM_PAD   = max(40, int(H * BOTTOM_FRAC))
+SAFE_W       = int(W * (1 - 2 * SIDE_MARGIN))
 
 def load_font(size):
     candidates = [
         '/System/Library/Fonts/Helvetica.ttc',
         '/System/Library/Fonts/Arial.ttf',
         '/Library/Fonts/Arial.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
         '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
         '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
     ]
@@ -160,6 +173,7 @@ def load_font(size):
     return ImageFont.load_default()
 
 FONT = load_font(FONT_SIZE)
+SPACE_W = FONT.getbbox(' ')[2] - FONT.getbbox(' ')[0]
 
 # Colors
 COL_BG      = (0,   0,   0)      # black background
@@ -169,7 +183,10 @@ COL_FUTURE  = (80,  80,  80)     # dark gray  — not yet spoken (black bg)
 if OVERLAY_MODE:
     COL_PAST   = (255, 255, 255) # white on video (already spoken)
     COL_FUTURE = (150, 150, 150) # mid-gray on video (upcoming)
-BAND_HEIGHT = FONT_SIZE + BOTTOM_PAD + 20  # semi-transparent strip height
+# BAND_HEIGHT is recomputed per frame once we know how many wrapped rows
+# the active line needs. Keep a sensible single-line default for callers.
+BAND_BASE   = FONT_SIZE + 20
+BAND_BOTTOM_PAD = max(20, int(H * 0.05))
 
 # ── Build active-line index for fast lookup ───────────────────────────────────
 # For each line, find the active word at a given time
@@ -195,6 +212,217 @@ def active_word_idx(line, t):
     return 0
 
 # ── Render a frame ────────────────────────────────────────────────────────────
+STYLE = args.style
+
+# Pill style — YouTube-caption look: single rounded translucent pill that hugs
+# the text, no per-word highlighting, font shrinks when needed to fit one row.
+PILL_FILL_RGBA   = (28, 28, 28, 165)   # near-black, ~65% opaque
+PILL_TEXT_RGB    = (255, 255, 255)
+PILL_PAD_X_FRAC  = 0.55                # horizontal padding as fraction of font size
+PILL_PAD_Y_FRAC  = 0.38                # vertical padding as fraction of font size
+PILL_RADIUS_FRAC = 0.30                # corner radius as fraction of pill height
+PILL_BOTTOM_FRAC = 0.09                # bottom-edge inset as fraction of frame height
+PILL_SAFE_FRAC   = 0.86                # max pill width as fraction of frame width
+PILL_MAX_W       = int(W * PILL_SAFE_FRAC)
+# Single-line min-shrink floor — below this we prefer a wrapped 2-row pill.
+PILL_MIN_FONT    = max(int(FONT_SIZE * 0.72), int(H * 0.040))
+
+# Pre-cache shrunk fonts so we don't reload TTFs every frame.
+_FONT_CACHE = {FONT_SIZE: FONT}
+def _font_for(size):
+    f = _FONT_CACHE.get(size)
+    if f is None:
+        f = load_font(size)
+        _FONT_CACHE[size] = f
+    return f
+
+def _measure_with(font, text):
+    bbox = font.getbbox(text)
+    return bbox[2] - bbox[0]
+
+def _measure(text):
+    return _measure_with(FONT, text)
+
+def _wrap_words(words, aidx):
+    """Greedy-wrap word list into rows that each fit within SAFE_W (karaoke style)."""
+    rows = []
+    row, row_w = [], 0
+    for i, w in enumerate(words):
+        text = w['text']
+        tw = _measure(text)
+        sw = SPACE_W if row else 0
+        if row and row_w + sw + tw > SAFE_W:
+            rows.append(row)
+            row, row_w = [], 0
+            sw = 0
+        if i < aidx:    col = COL_PAST
+        elif i == aidx: col = COL_ACTIVE
+        else:           col = COL_FUTURE
+        row.append({'text': text, 'color': col, 'w': tw, 'sw': sw})
+        row_w += sw + tw
+    if row:
+        rows.append(row)
+    return rows
+
+def _fit_pill_font(text):
+    """Largest cached font where `text` fits one line inside PILL_MAX_W, or None
+    if even the minimum single-line font is too wide (caller wraps instead)."""
+    size = FONT_SIZE
+    while size >= PILL_MIN_FONT:
+        f = _font_for(size)
+        max_text_w = PILL_MAX_W - 2 * int(size * PILL_PAD_X_FRAC)
+        if _measure_with(f, text) <= max_text_w:
+            return f
+        size -= 2
+    return None
+
+def _greedy_wrap(text, font, max_w):
+    """Break text into rows that each fit inside max_w using greedy word wrap."""
+    words = text.split(' ')
+    rows, cur = [], []
+    cur_w = 0
+    sp_w = _measure_with(font, ' ')
+    for w in words:
+        ww = _measure_with(font, w)
+        if cur and cur_w + sp_w + ww > max_w:
+            rows.append(' '.join(cur))
+            cur, cur_w = [w], ww
+        else:
+            cur.append(w)
+            cur_w = (cur_w + sp_w + ww) if len(cur) > 1 else ww
+    if cur:
+        rows.append(' '.join(cur))
+    return rows
+
+def _wrap_word_objects(words, font, max_w):
+    """Greedy-wrap a list of word dicts (preserving identity) into rows that
+    each fit within max_w. Returns list[list[word_dict]]."""
+    sp_w = _measure_with(font, ' ')
+    rows, cur = [], []
+    cur_w = 0
+    for w in words:
+        ww = _measure_with(font, w['text'])
+        if cur and cur_w + sp_w + ww > max_w:
+            rows.append(cur)
+            cur, cur_w = [w], ww
+        else:
+            cur.append(w)
+            cur_w = (cur_w + sp_w + ww) if len(cur) > 1 else ww
+    if cur:
+        rows.append(cur)
+    return rows
+
+def _render_pill(img, line, t):
+    """Rounded translucent caption pill with per-word yellow highlight on the
+    currently-spoken word. Auto-shrinks to fit one line, falls back to ≤2 rows."""
+    words_obj = line['words']
+    text = ' '.join(w['text'] for w in words_obj)
+    aidx = active_word_idx(line, t)
+    font = _fit_pill_font(text)
+
+    if font is not None:
+        rows = [words_obj]
+    else:
+        # Wrap fallback: pick the largest font that yields at most 2 rows AND
+        # fits the longest single word. Bounds: [PILL_MIN_FONT, FONT_SIZE].
+        font, rows = None, None
+        size = FONT_SIZE
+        while size >= PILL_MIN_FONT:
+            f = _font_for(size)
+            row_w = PILL_MAX_W - 2 * int(size * PILL_PAD_X_FRAC)
+            wrapped = _wrap_word_objects(words_obj, f, row_w)
+            longest_word_fits = all(_measure_with(f, w['text']) <= row_w
+                                    for w in words_obj)
+            if longest_word_fits and len(wrapped) <= 2:
+                font, rows = f, wrapped
+                break
+            size -= 2
+        if font is None:
+            font = _font_for(PILL_MIN_FONT)
+            row_w = PILL_MAX_W - 2 * int(font.size * PILL_PAD_X_FRAC)
+            rows = _wrap_word_objects(words_obj, font, row_w)
+
+    ascent, descent = font.getmetrics()
+    line_h = ascent + descent
+    row_gap = int(line_h * 0.18)
+    pad_x = int(font.size * PILL_PAD_X_FRAC)
+    pad_y = int(font.size * PILL_PAD_Y_FRAC)
+    sp_w = _measure_with(font, ' ')
+
+    # Measure each row's pixel width (words + interword spaces)
+    def row_width(row):
+        return sum(_measure_with(font, w['text']) for w in row) + sp_w * max(0, len(row) - 1)
+    row_widths = [row_width(r) for r in rows]
+    text_w = max(row_widths)
+    text_h = len(rows) * line_h + max(0, len(rows) - 1) * row_gap
+
+    pill_w = text_w + 2 * pad_x
+    pill_h = text_h + 2 * pad_y
+    radius = int((line_h + 2 * pad_y) * PILL_RADIUS_FRAC)
+
+    pill_x = (W - pill_w) // 2
+    pill_y = H - pill_h - int(H * PILL_BOTTOM_FRAC)
+
+    overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(overlay).rounded_rectangle(
+        [(pill_x, pill_y), (pill_x + pill_w, pill_y + pill_h)],
+        radius=radius, fill=PILL_FILL_RGBA,
+    )
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+    img = Image.alpha_composite(img, overlay)
+
+    # Per-word draw with active-word highlight
+    draw = ImageDraw.Draw(img)
+    y = pill_y + pad_y - int(descent * 0.15)
+    word_global_idx = 0
+    for row, rw in zip(rows, row_widths):
+        x = pill_x + (pill_w - rw) // 2
+        for j, w in enumerate(row):
+            color = COL_ACTIVE if word_global_idx == aidx else PILL_TEXT_RGB
+            draw.text((x, y), w['text'], font=font, fill=color)
+            x += _measure_with(font, w['text'])
+            if j < len(row) - 1:
+                x += sp_w
+            word_global_idx += 1
+        y += line_h + row_gap
+
+    return img.convert('RGB')
+
+def _render_karaoke(img, line, t):
+    """Original karaoke style — word-by-word color, multi-row wrap, translucent band."""
+    wds = line['words']
+    aidx = active_word_idx(line, t)
+    rows = _wrap_words(wds, aidx)
+    if not rows:
+        return img
+
+    line_h = FONT_SIZE + LINE_SPACING
+    text_block_h = len(rows) * line_h - LINE_SPACING
+    band_h = text_block_h + BAND_BASE
+    band_top = H - band_h - BAND_BOTTOM_PAD
+
+    overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(overlay).rectangle(
+        [(0, band_top), (W, H)], fill=(0, 0, 0, 160)
+    )
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+    img = Image.alpha_composite(img, overlay).convert('RGB')
+
+    draw = ImageDraw.Draw(img)
+    y = band_top + (BAND_BASE // 2) - (LINE_SPACING // 2)
+    for row in rows:
+        row_w = sum(seg['w'] + seg['sw'] for seg in row)
+        x = (W - row_w) // 2
+        for seg in row:
+            x += seg['sw']
+            draw.text((x, y), seg['text'], font=FONT, fill=seg['color'])
+            x += seg['w']
+        y += line_h
+
+    return img
+
 def render_frame(t, base_img=None):
     if base_img:
         img = base_img.copy()
@@ -205,45 +433,9 @@ def render_frame(t, base_img=None):
     if line is None or t > line['end']:
         return img
 
-    # In overlay mode, draw semi-transparent dark band at the bottom
-    if base_img:
-        overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-        overlay_draw = ImageDraw.Draw(overlay)
-        band_top = H - BAND_HEIGHT
-        overlay_draw.rectangle([(0, band_top), (W, H)], fill=(0, 0, 0, 160))
-        img = img.convert('RGBA')
-        img = Image.alpha_composite(img, overlay)
-        img = img.convert('RGB')
-
-    draw = ImageDraw.Draw(img)
-
-    # Build colored word segments
-    wds = line['words']
-    aidx = active_word_idx(line, t)
-
-    # Measure each word to compute total line width
-    segments = []
-    total_w = 0
-    for i, w in enumerate(wds):
-        text = w['text']
-        bbox = FONT.getbbox(text)
-        tw = bbox[2] - bbox[0]
-        if i < aidx:          col = COL_PAST
-        elif i == aidx:       col = COL_ACTIVE
-        else:                 col = COL_FUTURE
-        space_w = FONT.getbbox(' ')[2] - FONT.getbbox(' ')[0] if i < len(wds) - 1 else 0
-        segments.append({'text': text, 'color': col, 'w': tw, 'sw': space_w})
-        total_w += tw + space_w
-
-    # Center horizontally; place at bottom
-    x = (W - total_w) // 2
-    y = H - BOTTOM_PAD - FONT_SIZE
-
-    for seg in segments:
-        draw.text((x, y), seg['text'], font=FONT, fill=seg['color'])
-        x += seg['w'] + seg['sw']
-
-    return img
+    if STYLE == 'pill':
+        return _render_pill(img, line, t)
+    return _render_karaoke(img, line, t)
 
 # ── Video frame reader (overlay mode) ─────────────────────────────────────────
 video_reader = None
@@ -297,13 +489,24 @@ try:
             pct = frame_num / TOTAL_FRAMES * 100
             print(f"  {pct:.0f}%  t={t:.1f}s", flush=True)
 
+    # Python 3.12: communicate() flushes stdin even when already closed,
+    # raising ValueError. Read stderr + wait() directly instead.
+    try:
+        proc.stdin.flush()
+    except Exception:
+        pass
     proc.stdin.close()
-    _, stderr_data = proc.communicate()
+    stderr_data = proc.stderr.read() if proc.stderr else b""
+    proc.wait()
     if proc.returncode != 0:
         sys.stderr.write(stderr_data.decode(errors='replace'))
 except BrokenPipeError:
     sys.stderr.write("ffmpeg pipe closed early\n")
-    _, stderr_data = proc.communicate()
+    try:
+        stderr_data = proc.stderr.read() if proc.stderr else b""
+    except Exception:
+        stderr_data = b""
+    proc.wait()
     sys.stderr.write(stderr_data.decode(errors='replace'))
 
 if video_reader:
